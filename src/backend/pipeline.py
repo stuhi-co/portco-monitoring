@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.config import settings
-from backend.database import async_session_factory, Article, ArticleAnalysis, Company, Digest, Subscriber
-from backend.services.analysis import analyze_articles
+from backend.database import async_session_factory, Article, Company, Digest, Subscriber
+from backend.services.analysis import synthesize_company_developments
 from backend.services.digest import compile_digest
 from backend.services.email import send_digest_email
 from backend.services.search import (
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 async def run_digest_pipeline(subscriber_id: UUID) -> None:
-    """Full pipeline: search → dedup → analyze → compile → send."""
+    """Full pipeline: search → dedup → synthesize → compile → send."""
     async with async_session_factory() as session:
         # Load subscriber with companies and industries
         result = await session.execute(
@@ -62,12 +62,17 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
             logger.info("All articles already seen for subscriber %s", subscriber.email)
             return
 
-        # ── Step 3: Analyze ───────────────────────────────────────────────────
-        analyses_by_company = await _analyze_all(
-            session, subscriber, articles,
-        )
+        # ── Step 3: Synthesize ────────────────────────────────────────────────
+        developments_by_company = await _synthesize_all(subscriber, articles)
 
         # ── Step 4: Create digest record ──────────────────────────────────────
+        # Count unique source URLs across all developments
+        all_source_urls: set[str] = set()
+        for developments in developments_by_company.values():
+            for d in developments:
+                all_source_urls.update(d["source_urls"])
+        total_articles = len(all_source_urls)
+
         digest = Digest(
             subscriber_id=subscriber.id,
             period_start=period_start,
@@ -75,19 +80,6 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
         )
         session.add(digest)
         await session.flush()
-
-        # Mark analyses as included in this digest
-        total_articles = 0
-        for analyses in analyses_by_company.values():
-            for a in analyses:
-                if a.get("analysis_id"):
-                    result = await session.execute(
-                        select(ArticleAnalysis).where(ArticleAnalysis.id == a["analysis_id"])
-                    )
-                    aa = result.scalar_one_or_none()
-                    if aa:
-                        aa.included_in_digest_id = digest.id
-                total_articles += 1
 
         # ── Step 5: Compile digest HTML ───────────────────────────────────────
         companies_by_industry = _group_companies_by_industry(subscriber.companies)
@@ -100,7 +92,7 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
             subscriber_id=str(subscriber.id),
             fund_description=subscriber.fund_description,
             companies_by_industry=companies_by_industry,
-            analyses_by_company=analyses_by_company,
+            developments_by_company=developments_by_company,
             period_start=period_start_str,
             period_end=period_end_str,
         )
@@ -116,7 +108,7 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
 
         await session.commit()
         logger.info(
-            "Pipeline complete for %s: %d articles, digest_id=%s",
+            "Pipeline complete for %s: %d articles analyzed, digest_id=%s",
             subscriber.email,
             total_articles,
             digest.id,
@@ -234,16 +226,15 @@ async def _dedup_and_store_articles(
     return dict(articles_by_company)
 
 
-async def _analyze_all(
-    session: AsyncSession,
+async def _synthesize_all(
     subscriber: Subscriber,
     articles_by_company: dict[str, list[Article]],
 ) -> dict[str, list[dict]]:
-    """Run Claude analysis on all articles for each company.
+    """Synthesize all articles for each company into deduplicated developments.
 
-    Returns: {company_name: [{analysis data + article data}]}
+    Returns: {company_name: [{development data}]}
     """
-    analyses_by_company: dict[str, list[dict]] = {}
+    developments_by_company: dict[str, list[dict]] = {}
 
     company_map = {c.name: c for c in subscriber.companies}
 
@@ -252,7 +243,7 @@ async def _analyze_all(
         if not company:
             continue
 
-        # Prepare articles for analysis
+        # Prepare articles for synthesis
         article_dicts = [
             {
                 "url": a.url,
@@ -265,8 +256,8 @@ async def _analyze_all(
 
         industry_name = company.industry.name if company.industry else None
 
-        # Run Claude analysis
-        analysis_results = await analyze_articles(
+        # Run Claude synthesis
+        developments = await synthesize_company_developments(
             articles=article_dicts,
             company_name=company_name,
             company_description=company.description,
@@ -274,56 +265,16 @@ async def _analyze_all(
             fund_description=subscriber.fund_description,
         )
 
-        # Filter by relevance threshold and store
-        filtered = []
-        url_to_article = {a.url: a for a in articles}
+        # Filter by relevance threshold, sort, and limit
+        filtered = [
+            d.model_dump()
+            for d in developments
+            if d.relevance_score >= settings.relevance_threshold
+        ]
+        filtered.sort(key=lambda x: -x["relevance_score"])
+        developments_by_company[company_name] = filtered[:settings.max_developments_per_company]
 
-        for ar in analysis_results:
-            if ar["relevance_score"] < settings.relevance_threshold:
-                continue
-
-            article = url_to_article.get(ar["url"])
-            if not article:
-                continue
-
-            # Check if analysis already exists
-            existing = await session.execute(
-                select(ArticleAnalysis).where(
-                    ArticleAnalysis.article_id == article.id,
-                    ArticleAnalysis.company_id == company.id,
-                )
-            )
-            if existing.scalar_one_or_none():
-                continue
-
-            aa = ArticleAnalysis(
-                article_id=article.id,
-                company_id=company.id,
-                relevance_score=ar["relevance_score"],
-                category=ar["category"],
-                pe_insight=ar["pe_insight"],
-                is_competitor_alert=ar["is_competitor_alert"],
-            )
-            session.add(aa)
-            await session.flush()
-
-            filtered.append({
-                "analysis_id": str(aa.id),
-                "url": article.url,
-                "title": article.title,
-                "summary": article.summary,
-                "highlights": article.highlights,
-                "relevance_score": ar["relevance_score"],
-                "category": ar["category"],
-                "pe_insight": ar["pe_insight"],
-                "is_competitor_alert": ar["is_competitor_alert"],
-            })
-
-        # Sort by relevance, competitor alerts first
-        filtered.sort(key=lambda x: (-x["is_competitor_alert"], -x["relevance_score"]))
-        analyses_by_company[company_name] = filtered[:settings.max_articles_per_company]
-
-    return analyses_by_company
+    return developments_by_company
 
 
 def _group_companies_by_industry(companies: list[Company]) -> dict[str, list[dict]]:

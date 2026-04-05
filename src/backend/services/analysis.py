@@ -1,134 +1,140 @@
-import json
 import logging
 
 import anthropic
 
 from backend.config import settings
+from backend.schemas import Development
 
 logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-ANALYSIS_SYSTEM_PROMPT = """\
+SYNTHESIS_SYSTEM_PROMPT = """\
 You are a PE (Private Equity) analyst specializing in portfolio company intelligence.
-You analyze news articles and provide structured assessments focused on what matters
-to PE investors: valuation signals, competitive dynamics, growth indicators, risk factors,
-and strategic opportunities.
+You synthesize multiple news articles into distinct developments and provide structured
+assessments focused on what matters to PE investors: valuation signals, competitive dynamics,
+growth indicators, risk factors, and strategic opportunities.
 
-Always be concise and direct. Your "So What" PE insight should be one actionable sentence
-that a PE partner would find valuable."""
+Be concise but do not omit material information. Every development must capture the full picture.
+Only report facts explicitly stated in the articles. Do not speculate or add information not present in the sources.
+Only reference URLs from the provided article list. Do not fabricate or infer URLs.
+If multiple articles cover the same event, merge them into a single development and list all source URLs.
+Each pe_insight must be one actionable sentence grounded in the article content."""
 
 
-def _build_article_analysis_prompt(
-    article_title: str,
-    article_summary: str,
-    article_highlights: list[str],
+class SynthesisResponse(anthropic.BaseModel):
+    developments: list[Development]
+
+
+def _build_synthesis_prompt(
+    articles: list[dict],
     company_name: str,
     company_description: str | None,
     company_industry: str | None,
     fund_description: str | None,
 ) -> str:
-    highlights_text = "\n".join(f"- {h}" for h in article_highlights) if article_highlights else "N/A"
+    # Cap highlights per article if there are many articles
+    max_highlights = 3 if len(articles) > 15 else 5
+
+    article_blocks = []
+    for i, a in enumerate(articles, 1):
+        highlights = a.get("highlights", [])[:max_highlights]
+        highlights_text = "\n".join(f"  - {h}" for h in highlights) if highlights else "  N/A"
+        article_blocks.append(
+            f"[{i}] URL: {a['url']}\n"
+            f"    Title: {a.get('title', 'N/A')}\n"
+            f"    Summary: {a.get('summary', 'N/A')}\n"
+            f"    Highlights:\n{highlights_text}"
+        )
+
+    articles_text = "\n\n".join(article_blocks)
+
     return f"""\
-Analyze this article for PE relevance to the portfolio company.
+Analyze these articles for PE relevance to the portfolio company and synthesize them into
+distinct developments. Deduplicate overlapping coverage — if multiple articles cover the same
+event or topic, merge them into a single development citing all relevant source URLs.
 
 COMPANY: {company_name}
 COMPANY DESCRIPTION: {company_description or 'N/A'}
 INDUSTRY: {company_industry or 'N/A'}
 FUND CONTEXT: {fund_description or 'N/A'}
 
-ARTICLE TITLE: {article_title}
-ARTICLE SUMMARY: {article_summary or 'N/A'}
-KEY EXCERPTS:
-{highlights_text}
+ARTICLES:
+{articles_text}
 
-Return a JSON object with exactly these fields:
-{{
-  "relevance_score": <float 0-10, where 10 = directly impacts company valuation/strategy>,
-  "category": <one of: "m_and_a", "funding", "leadership", "product", "regulatory", "competitor", "new_entrant", "industry">,
-  "pe_insight": <one sentence "So What" for a PE investor — what action or implication does this have?>,
-  "is_competitor_alert": <boolean — true if this is about a competitor or new market entrant>
-}}
-
-Return ONLY valid JSON, no markdown fences or extra text."""
+Return deduplicated developments. Only use URLs from the list above."""
 
 
-async def analyze_articles(
+async def synthesize_company_developments(
     articles: list[dict],
     company_name: str,
     company_description: str | None,
     company_industry: str | None,
     fund_description: str | None,
-) -> list[dict]:
-    """Analyze a batch of articles for PE relevance using Claude.
+) -> list[Development]:
+    """Synthesize all articles for a company into deduplicated developments.
 
-    Each article dict should have: title, summary, highlights, url.
-    Returns list of analysis dicts with: relevance_score, category, pe_insight, is_competitor_alert.
+    Each article dict should have: url, title, summary, highlights.
+    Returns list of validated Development objects.
     """
-    results = []
+    if not articles:
+        return []
 
-    for i in range(0, len(articles), settings.analysis_batch_size):
-        batch = articles[i : i + settings.analysis_batch_size]
-        # Process batch articles concurrently-ish by batching in a single prompt
-        for article in batch:
-            prompt = _build_article_analysis_prompt(
-                article_title=article.get("title", ""),
-                article_summary=article.get("summary", ""),
-                article_highlights=article.get("highlights", []),
-                company_name=company_name,
-                company_description=company_description,
-                company_industry=company_industry,
-                fund_description=fund_description,
-            )
+    valid_urls = {a["url"] for a in articles}
 
-            try:
-                response = client.messages.create(
-                    model=settings.claude_model,
-                    max_tokens=300,
-                    system=ANALYSIS_SYSTEM_PROMPT,
-                    messages=[{"role": "user", "content": prompt}],
-                )
+    prompt = _build_synthesis_prompt(
+        articles=articles,
+        company_name=company_name,
+        company_description=company_description,
+        company_industry=company_industry,
+        fund_description=fund_description,
+    )
 
-                text = response.content[0].text.strip()
-                # Handle potential markdown fences
-                if text.startswith("```"):
-                    text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    try:
+        response = client.messages.parse(
+            model=settings.claude_model,
+            max_tokens=2000,
+            system=SYNTHESIS_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+            output_format=SynthesisResponse,
+        )
 
-                analysis = json.loads(text)
+        parsed = response.parsed_output
+        if not parsed:
+            logger.error("No parsed output in synthesis response for %s", company_name)
+            return []
 
-                # Validate and normalize
-                analysis["relevance_score"] = float(analysis.get("relevance_score", 0))
-                analysis["category"] = str(analysis.get("category", "industry"))
-                analysis["pe_insight"] = str(analysis.get("pe_insight", ""))
-                analysis["is_competitor_alert"] = bool(analysis.get("is_competitor_alert", False))
-                analysis["url"] = article["url"]
+        developments = []
+        for dev in parsed.developments:
+            # Filter hallucinated URLs
+            dev.source_urls = [u for u in dev.source_urls if u in valid_urls]
+            if not dev.source_urls:
+                logger.warning("Dropping development with no valid source URLs: %s", dev.headline)
+                continue
+            developments.append(dev)
 
-                results.append(analysis)
+        return developments
 
-            except (json.JSONDecodeError, KeyError, IndexError):
-                logger.exception("Failed to parse Claude analysis for %s", article.get("url"))
-                results.append({
-                    "url": article["url"],
-                    "relevance_score": 0.0,
-                    "category": "industry",
-                    "pe_insight": "Analysis unavailable.",
-                    "is_competitor_alert": False,
-                })
+    except Exception:
+        logger.exception("Failed to synthesize developments for %s", company_name)
+        return []
 
-    return results
+
+OVERVIEW_SYSTEM_PROMPT = """\
+You are a PE (Private Equity) analyst specializing in portfolio company intelligence.
+Always be concise and direct."""
 
 
 async def generate_executive_overview(
-    analyses_by_company: dict[str, list[dict]],
+    developments_by_company: dict[str, list[dict]],
     fund_description: str | None,
 ) -> str:
     """Generate the executive overview for the top of the digest."""
-    # Build a summary of all high-scoring articles
     summary_parts = []
-    for company_name, analyses in analyses_by_company.items():
-        relevant = [a for a in analyses if a.get("relevance_score", 0) >= settings.relevance_threshold]
+    for company_name, developments in developments_by_company.items():
+        relevant = [d for d in developments if d.get("relevance_score", 0) >= settings.relevance_threshold]
         if relevant:
-            insights = "; ".join(a["pe_insight"] for a in relevant[:3])
+            insights = "; ".join(d["pe_insight"] for d in relevant[:3])
             summary_parts.append(f"- {company_name}: {insights}")
 
     if not summary_parts:
@@ -153,7 +159,7 @@ Be direct and specific — no preamble or sign-off."""
     response = client.messages.create(
         model=settings.claude_model,
         max_tokens=400,
-        system=ANALYSIS_SYSTEM_PROMPT,
+        system=OVERVIEW_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.content[0].text.strip()
@@ -162,12 +168,12 @@ Be direct and specific — no preamble or sign-off."""
 async def generate_industry_pulse(
     industry_name: str,
     company_names: list[str],
-    analyses: list[dict],
+    developments: list[dict],
 ) -> str:
     """Generate a brief industry pulse for a sector cluster."""
     insights = "\n".join(
-        f"- [{a.get('category', 'industry')}] {a.get('pe_insight', '')}"
-        for a in analyses[:10]
+        f"- [{d.get('category', 'industry')}] {d.get('pe_insight', '')}"
+        for d in developments[:10]
     )
 
     if not insights:
@@ -186,7 +192,7 @@ Be specific about market dynamics. No preamble."""
     response = client.messages.create(
         model=settings.claude_model,
         max_tokens=200,
-        system=ANALYSIS_SYSTEM_PROMPT,
+        system=OVERVIEW_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.content[0].text.strip()

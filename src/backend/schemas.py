@@ -105,14 +105,10 @@ class DigestSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ArticleAnalysisOut(BaseModel):
-    article_title: str | None
-    article_url: str
-    summary: str | None
-    highlights: list[str] | None
-    relevance_score: float
+class Development(BaseModel):
+    headline: str
+    summary: str
     category: ArticleCategory
+    relevance_score: float = Field(ge=0, le=10)
     pe_insight: str
-    is_competitor_alert: bool
-
-    model_config = {"from_attributes": True}
+    source_urls: list[str] = Field(min_length=1)

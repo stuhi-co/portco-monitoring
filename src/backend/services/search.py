@@ -66,6 +66,7 @@ async def search_company_news(
             "highlights": {"num_sentences": 5},
             "summary": True,
         },
+        "system_prompt": "Prefer primary sources. Avoid duplicate results.",
     }
 
     if start_date:
@@ -103,6 +104,7 @@ async def search_competitor_news(
             "highlights": {"num_sentences": 5},
             "summary": True,
         },
+        "system_prompt": "Prefer primary sources. Avoid duplicate results.",
     }
 
     if start_date:
@@ -135,6 +137,7 @@ async def search_industry_news(
             "highlights": {"num_sentences": 5},
             "summary": True,
         },
+        "system_prompt": "Prefer primary sources. Avoid duplicate results.",
     }
 
     if start_date:

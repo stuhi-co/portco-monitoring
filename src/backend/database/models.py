@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -53,7 +53,6 @@ class Company(Base):
 
     subscriber: Mapped["Subscriber"] = relationship(back_populates="companies")
     industry: Mapped["IndustryRecord | None"] = relationship()
-    analyses: Mapped[list["ArticleAnalysis"]] = relationship(back_populates="company", cascade="all, delete-orphan")
 
 
 class Article(Base):
@@ -67,26 +66,6 @@ class Article(Base):
     author: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-
-    analyses: Mapped[list["ArticleAnalysis"]] = relationship(back_populates="article", cascade="all, delete-orphan")
-
-
-class ArticleAnalysis(Base):
-    __tablename__ = "article_analyses"
-    __table_args__ = (UniqueConstraint("article_id", "company_id"),)
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_new_uuid)
-    article_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
-    company_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
-    relevance_score: Mapped[float] = mapped_column(Float, nullable=False)
-    category: Mapped[str] = mapped_column(Text, nullable=False)
-    pe_insight: Mapped[str] = mapped_column(Text, nullable=False)
-    is_competitor_alert: Mapped[bool] = mapped_column(Boolean, default=False)
-    included_in_digest_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("digests.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-
-    article: Mapped["Article"] = relationship(back_populates="analyses")
-    company: Mapped["Company"] = relationship(back_populates="analyses")
 
 
 class Digest(Base):

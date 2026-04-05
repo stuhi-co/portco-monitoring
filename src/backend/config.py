@@ -9,9 +9,8 @@ class Settings(BaseSettings):
 
     # Pipeline
     relevance_threshold: float = 6.0
-    max_articles_per_company: int = 10
+    max_developments_per_company: int = 10
     exa_results_per_query: int = 10
-    analysis_batch_size: int = 5
 
     # Email
     email_from: str = "Ana Llana <ana@stuhi.co>"

@@ -17,7 +17,7 @@ async def compile_digest(
     subscriber_id: str,
     fund_description: str | None,
     companies_by_industry: dict[str, list[dict]],
-    analyses_by_company: dict[str, list[dict]],
+    developments_by_company: dict[str, list[dict]],
     period_start: str,
     period_end: str,
 ) -> tuple[str, str]:
@@ -25,40 +25,45 @@ async def compile_digest(
 
     Args:
         companies_by_industry: {industry_name: [{name, id, ...}]}
-        analyses_by_company: {company_name: [{article analysis + article data}]}
+        developments_by_company: {company_name: [{development data}]}
         period_start/end: formatted date strings
 
     Returns:
         (subject, html_content)
     """
     # Generate executive overview
-    executive_overview = await generate_executive_overview(analyses_by_company, fund_description)
+    executive_overview = await generate_executive_overview(developments_by_company, fund_description)
 
     # Generate industry pulses and organize data for template
     industry_sections = []
     total_articles = 0
 
     for industry_name, companies in companies_by_industry.items():
-        # Collect all analyses for this industry's companies
-        all_industry_analyses = []
+        # Collect all developments for this industry's companies
+        all_industry_developments = []
         company_sections = []
 
         for company in companies:
             company_name = company["name"]
-            company_analyses = analyses_by_company.get(company_name, [])
-            all_industry_analyses.extend(company_analyses)
+            company_developments = developments_by_company.get(company_name, [])
+            all_industry_developments.extend(company_developments)
 
-            if company_analyses:
+            if company_developments:
+                # Count unique source URLs for this company
+                company_source_urls: set[str] = set()
+                for d in company_developments:
+                    company_source_urls.update(d["source_urls"])
+                total_articles += len(company_source_urls)
+
                 company_sections.append({
                     "name": company_name,
-                    "analyses": company_analyses,
+                    "developments": company_developments,
                 })
-                total_articles += len(company_analyses)
 
         # Generate industry pulse
         company_names = [c["name"] for c in companies]
         industry_pulse = await generate_industry_pulse(
-            industry_name, company_names, all_industry_analyses
+            industry_name, company_names, all_industry_developments
         )
 
         if company_sections:
