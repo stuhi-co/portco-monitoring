@@ -15,6 +15,7 @@ from backend.services.repository import (
     get_subscriber_with_companies,
     load_existing_articles,
 )
+from backend.schemas import SourceType
 from backend.services.search import (
     SearchResult,
     search_company_news,
@@ -53,6 +54,17 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
             logger.info("No news found for subscriber %s", subscriber.email)
             return
 
+        # Build URL → source_type mapping per company (before dedup loses source_type)
+        _PRIORITY = {SourceType.company: 2, SourceType.competitor: 1, SourceType.industry: 0}
+        source_types: dict[str, dict[str, str]] = {}
+        for company_name, search_results in raw_results.items():
+            mapping: dict[str, str] = {}
+            for sr in search_results:
+                existing = mapping.get(sr.url)
+                if existing is None or _PRIORITY[sr.source_type] > _PRIORITY.get(SourceType(existing), -1):
+                    mapping[sr.url] = sr.source_type.value
+            source_types[company_name] = mapping
+
         # ── Step 2: Deduplicate ───────────────────────────────────────────────
         articles = await _dedup_and_store_articles(session, raw_results)
 
@@ -61,7 +73,7 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
             return
 
         # ── Step 3: Synthesize ────────────────────────────────────────────────
-        developments_by_company = await _synthesize_all(subscriber, articles)
+        developments_by_company = await _synthesize_all(subscriber, articles, source_types)
 
         # ── Step 4: Create digest record ──────────────────────────────────────
         # Count unique source URLs across all developments
@@ -213,6 +225,7 @@ async def _dedup_and_store_articles(
 async def _synthesize_all(
     subscriber,
     articles_by_company: dict[str, list[Article]],
+    source_types: dict[str, dict[str, str]],
 ) -> dict[str, list[dict]]:
     """Synthesize all articles for each company into deduplicated developments (in parallel).
 
@@ -225,12 +238,15 @@ async def _synthesize_all(
         if not company:
             return company_name, []
 
+        url_source_types = source_types.get(company_name, {})
+
         article_dicts = [
             {
                 "url": a.url,
                 "title": a.title or "",
                 "summary": a.summary or "",
                 "highlights": a.highlights or [],
+                "source_type": url_source_types.get(a.url, "company"),
             }
             for a in articles
         ]

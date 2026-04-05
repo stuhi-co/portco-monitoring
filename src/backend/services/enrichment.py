@@ -38,7 +38,7 @@ ENRICHMENT_SCHEMA = {
 
 
 async def enrich_company(session: AsyncSession, company: Company) -> None:
-    """Enrich a company using the Exa Research API with outputSchema."""
+    """Enrich a company using the Exa Research API with structured output."""
     instructions = (
         f"Research the company '{company.name}'. Provide a concise profile including: "
         f"what they do, their market position, main competitors, and key topics to monitor."
@@ -47,6 +47,7 @@ async def enrich_company(session: AsyncSession, company: Company) -> None:
     try:
         research = await exa.research.create(
             instructions=instructions,
+            model="exa-research-fast",
             output_schema=ENRICHMENT_SCHEMA,
         )
         result = await exa.research.poll_until_finished(

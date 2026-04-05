@@ -45,18 +45,25 @@ async def compile_digest(
 
         for company in companies:
             company_name = company["name"]
-            company_developments = developments_by_company.get(company_name, [])
+            company_devs = developments_by_company.get(company_name, [])
 
-            if company_developments:
+            if company_devs:
                 # Count unique source URLs for this company
                 company_source_urls: set[str] = set()
-                for d in company_developments:
+                for d in company_devs:
                     company_source_urls.update(d["source_urls"])
                 total_articles += len(company_source_urls)
 
+                key_devs = company_devs[:settings.max_key_developments]
+                notable_devs = company_devs[
+                    settings.max_key_developments:
+                    settings.max_key_developments + settings.max_notable_developments
+                ]
+
                 company_sections.append({
                     "name": company_name,
-                    "developments": company_developments,
+                    "key_developments": key_devs,
+                    "notable_developments": notable_devs,
                 })
 
         # Generate industry pulse from broad industry articles (not company developments)

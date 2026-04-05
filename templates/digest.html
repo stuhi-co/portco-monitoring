@@ -52,9 +52,10 @@
           </td>
         </tr>
 
-        {% for d in company.developments %}
+        <!-- Key Developments (full detail) -->
+        {% for d in company.key_developments %}
         <tr>
-          <td style="padding:8px 0 12px 16px;{% if not loop.last %}border-bottom:1px solid #f0f0f0;{% endif %}">
+          <td style="padding:8px 0 12px 16px;{% if not loop.last or company.notable_developments %}border-bottom:1px solid #f0f0f0;{% endif %}">
             <!-- Category badge -->
             <p style="margin:0 0 4px;">
               {% if d.category in ("competitor", "new_entrant") %}
@@ -76,6 +77,30 @@
           </td>
         </tr>
         {% endfor %}
+
+        <!-- Notable Developments (one-liners) -->
+        {% if company.notable_developments %}
+        <tr>
+          <td style="padding:10px 0 4px 16px;">
+            <p style="margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#9ca3af;">Also Notable</p>
+          </td>
+        </tr>
+        {% for d in company.notable_developments %}
+        <tr>
+          <td style="padding:4px 0 4px 16px;">
+            <p style="margin:0;font-size:13px;color:#6b7280;">
+              {% if d.category in ("competitor", "new_entrant") %}
+              <span style="display:inline-block;background:#fef2f2;color:#dc2626;font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;text-transform:uppercase;">{{ d.category | replace('_', ' ') }}</span>
+              {% else %}
+              <span style="display:inline-block;background:#f0f9ff;color:#0369a1;font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;text-transform:uppercase;">{{ d.category | replace('_', ' ') }}</span>
+              {% endif %}
+              {{ d.headline }}
+              {% for url in d.source_urls %}<a href="{{ url }}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">[{{ loop.index }}]</a>{% if not loop.last %} {% endif %}{% endfor %}
+            </p>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
 
       </table>
     </td>

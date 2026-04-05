@@ -8,23 +8,41 @@ from pydantic import BaseModel, EmailStr, Field
 # ── StrEnums ──────────────────────────────────────────────────────────────────
 
 
+class SourceType(StrEnum):
+    company = "company"
+    competitor = "competitor"
+    industry = "industry"
+
+
 class Industry(StrEnum):
-    cloud_infrastructure = "cloud_infrastructure"
-    cybersecurity = "cybersecurity"
-    fintech = "fintech"
-    healthtech = "healthtech"
-    devops = "devops"
-    data_analytics = "data_analytics"
     ai_ml = "ai_ml"
+    biotech = "biotech"
+    cleantech = "cleantech"
+    cloud_infrastructure = "cloud_infrastructure"
+    communications = "communications"
+    construction_tech = "construction_tech"
+    crypto_web3 = "crypto_web3"
+    cybersecurity = "cybersecurity"
+    data_analytics = "data_analytics"
+    devops = "devops"
     ecommerce = "ecommerce"
-    enterprise_software = "enterprise_software"
-    martech = "martech"
     edtech = "edtech"
-    proptech = "proptech"
-    insurtech = "insurtech"
-    supply_chain = "supply_chain"
+    enterprise_software = "enterprise_software"
+    fintech = "fintech"
+    food_and_delivery = "food_and_delivery"
+    gaming = "gaming"
+    govtech_defense = "govtech_defense"
+    healthtech = "healthtech"
     hr_tech = "hr_tech"
+    insurtech = "insurtech"
     legal_tech = "legal_tech"
+    martech = "martech"
+    media_entertainment = "media_entertainment"
+    mobility_transport = "mobility_transport"
+    proptech = "proptech"
+    social_and_creator = "social_and_creator"
+    supply_chain = "supply_chain"
+    travel_hospitality = "travel_hospitality"
     other = "other"
 
 

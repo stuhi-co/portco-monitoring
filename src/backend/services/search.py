@@ -6,6 +6,7 @@ from exa_py import AsyncExa
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from backend.config import settings
+from backend.schemas import SourceType
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,10 @@ class SearchResult:
     highlights: list[str] = field(default_factory=list)
     author: str | None = None
     published_at: datetime | None = None
+    source_type: SourceType = SourceType.company
 
 
-def _parse_results(exa_results) -> list[SearchResult]:
+def _parse_results(exa_results, source_type: SourceType = SourceType.company) -> list[SearchResult]:
     """Convert Exa search results to our internal dataclass."""
     parsed: list[SearchResult] = []
     for r in exa_results.results:
@@ -48,6 +50,7 @@ def _parse_results(exa_results) -> list[SearchResult]:
                 highlights=r.highlights or [],
                 author=r.author,
                 published_at=published,
+                source_type=source_type,
             )
         )
     return parsed
@@ -83,7 +86,7 @@ async def search_company_news(
 
     logger.info("Searching news for %s", company_name)
     result = await exa.search(**kwargs)
-    return _parse_results(result)
+    return _parse_results(result, source_type=SourceType.company)
 
 
 @_retry_exa
@@ -120,7 +123,7 @@ async def search_competitor_news(
 
     logger.info("Searching competitor news for %s", comp_names)
     result = await exa.search(**kwargs)
-    return _parse_results(result)
+    return _parse_results(result, source_type=SourceType.competitor)
 
 
 @_retry_exa
@@ -152,4 +155,4 @@ async def search_industry_news(
 
     logger.info("Searching industry news for %s", industry_label)
     result = await exa.search(**kwargs)
-    return _parse_results(result)
+    return _parse_results(result, source_type=SourceType.industry)

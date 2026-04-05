@@ -149,7 +149,7 @@ async def generate_executive_overview(
 
     response = await client.messages.create(
         model=settings.claude_model,
-        max_tokens=300,
+        max_tokens=200,
         system=DIGEST_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )

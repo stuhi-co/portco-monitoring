@@ -1,6 +1,8 @@
 DIGEST_SYSTEM_PROMPT = """\
 You are a PE (Private Equity) analyst. Be concise and to the point. \
-No preamble, no sign-off."""
+No preamble, no sign-off. \
+Output plain text only — never use markdown formatting (no **, no *, no #, no bullet points). \
+Content renders in HTML email."""
 
 
 def build_executive_overview_prompt(
@@ -15,8 +17,9 @@ FUND CONTEXT: {fund_description or 'Growth equity fund'}
 KEY DEVELOPMENTS:
 {company_summary}
 
-Write 2-3 concise sentences on the most important cross-portfolio themes: \
-competitive dynamics, sector shifts, and actionable signals for the investment team."""
+Write EXACTLY 2-3 plain-text sentences on the most important cross-portfolio themes: \
+competitive dynamics, sector shifts, and actionable signals for the investment team. \
+Do NOT use markdown formatting. Output plain text only."""
 
 
 def build_industry_pulse_prompt(
@@ -35,4 +38,6 @@ Focus on broad market dynamics, regulatory shifts, and macro trends — \
 NOT on individual company news.
 
 Recent industry coverage:
-{article_lines}"""
+{article_lines}
+
+EXACTLY 1-2 sentences. No more. Do NOT use markdown formatting. Output plain text only."""

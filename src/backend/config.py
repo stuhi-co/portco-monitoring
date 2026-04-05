@@ -8,9 +8,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://portco:portco@localhost:5432/portco_monitoring"
 
     # Pipeline
-    relevance_threshold: float = 6.0
-    max_developments_per_company: int = 10
-    exa_results_per_query: int = 10
+    relevance_threshold: float = 6.5
+    max_developments_per_company: int = 5
+    exa_results_per_query: int = 7
+    max_key_developments: int = 3
+    max_notable_developments: int = 2
 
     # Email
     email_from: str = "Ana Llana <ana@stuhi.co>"
