@@ -18,6 +18,7 @@ async def compile_digest(
     fund_description: str | None,
     companies_by_industry: dict[str, list[dict]],
     developments_by_company: dict[str, list[dict]],
+    industry_articles: dict[str, list[dict]],
     period_start: str,
     period_end: str,
 ) -> tuple[str, str]:
@@ -26,6 +27,7 @@ async def compile_digest(
     Args:
         companies_by_industry: {industry_name: [{name, id, ...}]}
         developments_by_company: {company_name: [{development data}]}
+        industry_articles: {industry_name: [{title, summary}]}
         period_start/end: formatted date strings
 
     Returns:
@@ -39,14 +41,11 @@ async def compile_digest(
     total_articles = 0
 
     for industry_name, companies in companies_by_industry.items():
-        # Collect all developments for this industry's companies
-        all_industry_developments = []
         company_sections = []
 
         for company in companies:
             company_name = company["name"]
             company_developments = developments_by_company.get(company_name, [])
-            all_industry_developments.extend(company_developments)
 
             if company_developments:
                 # Count unique source URLs for this company
@@ -60,10 +59,9 @@ async def compile_digest(
                     "developments": company_developments,
                 })
 
-        # Generate industry pulse
-        company_names = [c["name"] for c in companies]
+        # Generate industry pulse from broad industry articles (not company developments)
         industry_pulse = await generate_industry_pulse(
-            industry_name, company_names, all_industry_developments
+            industry_name, industry_articles.get(industry_name, [])
         )
 
         if company_sections:

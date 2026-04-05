@@ -144,22 +144,18 @@ async def generate_executive_overview(
 
 async def generate_industry_pulse(
     industry_name: str,
-    company_names: list[str],
-    developments: list[dict],
+    articles: list[dict],
 ) -> str:
-    """Generate a brief industry pulse for a sector cluster."""
-    insights = "\n".join(
-        f"- [{d.get('category', 'industry')}] {d.get('pe_insight', '')}"
-        for d in developments[:10]
-    )
+    """Generate a broad industry pulse from raw Exa industry articles.
 
-    if not insights:
+    Each article dict should have: title, summary.
+    """
+    if not articles:
         return f"No significant developments in {industry_name.replace('_', ' ')} this period."
 
     prompt = build_industry_pulse_prompt(
         industry_name=industry_name,
-        company_names=company_names,
-        insights=insights,
+        articles=articles,
     )
 
     response = client.messages.create(

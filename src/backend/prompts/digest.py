@@ -21,15 +21,18 @@ competitive dynamics, sector shifts, and actionable signals for the investment t
 
 def build_industry_pulse_prompt(
     industry_name: str,
-    company_names: list[str],
-    insights: str,
+    articles: list[dict],
 ) -> str:
+    article_lines = "\n".join(
+        f"- {a.get('title', 'N/A')}: {a.get('summary', 'N/A')}"
+        for a in articles[:10]
+    )
+
     return f"""\
 Write a 1-2 sentence industry pulse for the "{industry_name.replace('_', ' ')}" sector.
 
-Portfolio companies: {', '.join(company_names)}
+Focus on broad market dynamics, regulatory shifts, and macro trends — \
+NOT on individual company news.
 
-Key developments:
-{insights}
-
-Be specific about market dynamics."""
+Recent industry coverage:
+{article_lines}"""
