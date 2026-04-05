@@ -1,68 +1,43 @@
 import logging
 
 import anthropic
+from pydantic import BaseModel, Field
 
 from backend.config import settings
-from backend.schemas import Development
+from backend.prompts import (
+    DIGEST_SYSTEM_PROMPT,
+    SYNTHESIS_SYSTEM_PROMPT,
+    build_executive_overview_prompt,
+    build_industry_pulse_prompt,
+    build_synthesis_prompt,
+)
+from backend.schemas import ArticleCategory, Development
 
 logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-SYNTHESIS_SYSTEM_PROMPT = """\
-You are a PE (Private Equity) analyst specializing in portfolio company intelligence.
-You synthesize multiple news articles into distinct developments and provide structured
-assessments focused on what matters to PE investors: valuation signals, competitive dynamics,
-growth indicators, risk factors, and strategic opportunities.
 
-Be concise but do not omit material information. Every development must capture the full picture.
-Only report facts explicitly stated in the articles. Do not speculate or add information not present in the sources.
-Only reference URLs from the provided article list. Do not fabricate or infer URLs.
-If multiple articles cover the same event, merge them into a single development and list all source URLs.
-Each pe_insight must be one actionable sentence grounded in the article content."""
+# ── LLM output models (index-based, never exposed outside this module) ───────
 
 
-class SynthesisResponse(anthropic.BaseModel):
-    developments: list[Development]
+class _LLMDevelopment(BaseModel):
+    headline: str
+    summary: str
+    category: ArticleCategory
+    relevance_score: float = Field(ge=0, le=10)
+    pe_insight: str
+    source_indices: list[int] = Field(
+        min_length=1,
+        description="1-based indices of the articles that support this development.",
+    )
 
 
-def _build_synthesis_prompt(
-    articles: list[dict],
-    company_name: str,
-    company_description: str | None,
-    company_industry: str | None,
-    fund_description: str | None,
-) -> str:
-    # Cap highlights per article if there are many articles
-    max_highlights = 3 if len(articles) > 15 else 5
+class _SynthesisResponse(BaseModel):
+    developments: list[_LLMDevelopment]
 
-    article_blocks = []
-    for i, a in enumerate(articles, 1):
-        highlights = a.get("highlights", [])[:max_highlights]
-        highlights_text = "\n".join(f"  - {h}" for h in highlights) if highlights else "  N/A"
-        article_blocks.append(
-            f"[{i}] URL: {a['url']}\n"
-            f"    Title: {a.get('title', 'N/A')}\n"
-            f"    Summary: {a.get('summary', 'N/A')}\n"
-            f"    Highlights:\n{highlights_text}"
-        )
 
-    articles_text = "\n\n".join(article_blocks)
-
-    return f"""\
-Analyze these articles for PE relevance to the portfolio company and synthesize them into
-distinct developments. Deduplicate overlapping coverage — if multiple articles cover the same
-event or topic, merge them into a single development citing all relevant source URLs.
-
-COMPANY: {company_name}
-COMPANY DESCRIPTION: {company_description or 'N/A'}
-INDUSTRY: {company_industry or 'N/A'}
-FUND CONTEXT: {fund_description or 'N/A'}
-
-ARTICLES:
-{articles_text}
-
-Return deduplicated developments. Only use URLs from the list above."""
+# ── Synthesis ────────────────────────────────────────────────────────────────
 
 
 async def synthesize_company_developments(
@@ -75,14 +50,15 @@ async def synthesize_company_developments(
     """Synthesize all articles for a company into deduplicated developments.
 
     Each article dict should have: url, title, summary, highlights.
-    Returns list of validated Development objects.
+    Returns list of validated Development objects with resolved URLs.
     """
     if not articles:
         return []
 
-    valid_urls = {a["url"] for a in articles}
+    # Build index → URL mapping (1-based)
+    index_to_url = {i: a["url"] for i, a in enumerate(articles, 1)}
 
-    prompt = _build_synthesis_prompt(
+    prompt = build_synthesis_prompt(
         articles=articles,
         company_name=company_name,
         company_description=company_description,
@@ -96,7 +72,7 @@ async def synthesize_company_developments(
             max_tokens=2000,
             system=SYNTHESIS_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
-            output_format=SynthesisResponse,
+            output_format=_SynthesisResponse,
         )
 
         parsed = response.parsed_output
@@ -105,13 +81,27 @@ async def synthesize_company_developments(
             return []
 
         developments = []
-        for dev in parsed.developments:
-            # Filter hallucinated URLs
-            dev.source_urls = [u for u in dev.source_urls if u in valid_urls]
-            if not dev.source_urls:
-                logger.warning("Dropping development with no valid source URLs: %s", dev.headline)
+        for raw in parsed.developments:
+            # Resolve valid indices to URLs, skip out-of-range indices
+            source_urls = [
+                index_to_url[i]
+                for i in raw.source_indices
+                if i in index_to_url
+            ]
+            if not source_urls:
+                logger.warning("Dropping development with no valid source indices: %s", raw.headline)
                 continue
-            developments.append(dev)
+
+            developments.append(
+                Development(
+                    headline=raw.headline,
+                    summary=raw.summary,
+                    category=raw.category,
+                    relevance_score=raw.relevance_score,
+                    pe_insight=raw.pe_insight,
+                    source_urls=source_urls,
+                )
+            )
 
         return developments
 
@@ -120,9 +110,7 @@ async def synthesize_company_developments(
         return []
 
 
-OVERVIEW_SYSTEM_PROMPT = """\
-You are a PE (Private Equity) analyst specializing in portfolio company intelligence.
-Always be concise and direct."""
+# ── Digest text generation ───────────────────────────────────────────────────
 
 
 async def generate_executive_overview(
@@ -140,26 +128,15 @@ async def generate_executive_overview(
     if not summary_parts:
         return "No significant portfolio developments this period."
 
-    company_summary = "\n".join(summary_parts)
-
-    prompt = f"""\
-You are writing the executive overview for a PE fund's weekly portfolio intelligence digest.
-
-FUND CONTEXT: {fund_description or 'Growth equity fund'}
-
-KEY DEVELOPMENTS THIS WEEK:
-{company_summary}
-
-Write 3-4 sentences highlighting the most important themes across the portfolio.
-Focus on: cross-portfolio patterns, competitive dynamics, sector-level shifts, and
-actionable signals for the investment team.
-
-Be direct and specific — no preamble or sign-off."""
+    prompt = build_executive_overview_prompt(
+        company_summary="\n".join(summary_parts),
+        fund_description=fund_description,
+    )
 
     response = client.messages.create(
         model=settings.claude_model,
-        max_tokens=400,
-        system=OVERVIEW_SYSTEM_PROMPT,
+        max_tokens=300,
+        system=DIGEST_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.content[0].text.strip()
@@ -179,20 +156,16 @@ async def generate_industry_pulse(
     if not insights:
         return f"No significant developments in {industry_name.replace('_', ' ')} this period."
 
-    prompt = f"""\
-Write a 2-sentence industry pulse for the "{industry_name.replace('_', ' ')}" sector.
-
-Portfolio companies in this sector: {', '.join(company_names)}
-
-Key developments:
-{insights}
-
-Be specific about market dynamics. No preamble."""
+    prompt = build_industry_pulse_prompt(
+        industry_name=industry_name,
+        company_names=company_names,
+        insights=insights,
+    )
 
     response = client.messages.create(
         model=settings.claude_model,
-        max_tokens=200,
-        system=OVERVIEW_SYSTEM_PROMPT,
+        max_tokens=150,
+        system=DIGEST_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.content[0].text.strip()
