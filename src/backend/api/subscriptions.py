@@ -9,11 +9,14 @@ from sqlalchemy.orm import selectinload
 from backend.database import get_session, Company, IndustryRecord, Subscriber
 from backend.schemas import (
     CompanyResponse,
+    GenerateFundDescriptionRequest,
+    GenerateFundDescriptionResponse,
     Industry,
     SubscribeRequest,
     SubscriptionResponse,
     SubscriptionUpdate,
 )
+from backend.services.enrichment import enrich_fund_description, extract_domain
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["subscriptions"])
@@ -49,6 +52,32 @@ async def _enrich_companies_background(subscriber_id: UUID) -> None:
                 logger.exception("Failed to enrich company %s", company.name)
 
         await session.commit()
+
+
+@router.post(
+    "/generate-fund-description",
+    response_model=GenerateFundDescriptionResponse,
+)
+async def generate_fund_description(body: GenerateFundDescriptionRequest):
+    domain = extract_domain(body.email)
+    if domain is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Please use a company email to auto-generate a fund description.",
+        )
+    try:
+        description = await enrich_fund_description(domain)
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate fund description. Please describe your fund manually.",
+        )
+    if not description:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate fund description. Please describe your fund manually.",
+        )
+    return GenerateFundDescriptionResponse(fund_description=description)
 
 
 @router.post("/subscribe", response_model=SubscriptionResponse, status_code=201)

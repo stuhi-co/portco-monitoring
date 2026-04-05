@@ -86,3 +86,9 @@ export function useLookupByEmail() {
     mutationFn: api.lookupByEmail,
   });
 }
+
+export function useGenerateFundDescription() {
+  return useMutation({
+    mutationFn: api.generateFundDescription,
+  });
+}

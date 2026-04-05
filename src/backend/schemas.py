@@ -70,6 +70,10 @@ class CompanyInput(BaseModel):
     industry: Industry | None = None
 
 
+class GenerateFundDescriptionRequest(BaseModel):
+    email: EmailStr
+
+
 class SubscribeRequest(BaseModel):
     email: EmailStr
     companies: list[CompanyInput] = Field(min_length=1, max_length=50)
@@ -121,6 +125,10 @@ class DigestSummary(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class GenerateFundDescriptionResponse(BaseModel):
+    fund_description: str
 
 
 class Development(BaseModel):

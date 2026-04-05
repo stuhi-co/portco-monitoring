@@ -82,6 +82,10 @@ export interface DigestSummary {
   created_at: string;
 }
 
+export interface GenerateFundDescriptionResponse {
+  fund_description: string;
+}
+
 export interface IndustryOption {
   value: string;
   label: string;
@@ -165,6 +169,13 @@ export function triggerDigest(subscriptionId: string) {
   return fetchJSON<{ message: string; subscriber_id: string }>(
     `/api/subscriptions/${subscriptionId}/trigger`,
     { method: "POST" }
+  );
+}
+
+export function generateFundDescription(email: string) {
+  return fetchJSON<GenerateFundDescriptionResponse>(
+    "/api/generate-fund-description",
+    { method: "POST", body: JSON.stringify({ email }) }
   );
 }
 

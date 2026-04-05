@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -16,9 +16,9 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useUpdateSubscription, useDeleteSubscription } from "@/lib/hooks";
+import { useUpdateSubscription, useDeleteSubscription, useGenerateFundDescription } from "@/lib/hooks";
 import { clearSubscriptionId } from "@/lib/subscription";
-import type { Frequency, SubscriptionResponse } from "@/lib/api";
+import { ApiError, type Frequency, type SubscriptionResponse } from "@/lib/api";
 
 interface SubscriptionSettingsProps {
   subscription: SubscriptionResponse;
@@ -30,6 +30,7 @@ export function SubscriptionSettings({
   const router = useRouter();
   const updateMutation = useUpdateSubscription(subscription.id);
   const deleteMutation = useDeleteSubscription();
+  const generateMutation = useGenerateFundDescription();
 
   const [frequency, setFrequency] = useState<Frequency>(
     subscription.frequency
@@ -99,13 +100,42 @@ export function SubscriptionSettings({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="settings-fund-desc">Fund Description</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="settings-fund-desc">Fund Description</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={generateMutation.isPending}
+                  onClick={async () => {
+                    try {
+                      const result = await generateMutation.mutateAsync(subscription.email);
+                      setFundDescription(result.fund_description);
+                      toast.success("Fund description generated");
+                    } catch (err) {
+                      if (err instanceof ApiError && err.status === 422) {
+                        toast.error("Please use a company email to auto-generate");
+                      } else {
+                        toast.error("Generation failed, please describe your fund manually");
+                      }
+                    }
+                  }}
+                >
+                  {generateMutation.isPending ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-1 h-4 w-4" />
+                  )}
+                  Generate
+                </Button>
+              </div>
               <Textarea
                 id="settings-fund-desc"
                 placeholder="Describe your fund's focus..."
                 value={fundDescription}
                 onChange={(e) => setFundDescription(e.target.value)}
                 rows={3}
+                disabled={generateMutation.isPending}
               />
             </div>
 

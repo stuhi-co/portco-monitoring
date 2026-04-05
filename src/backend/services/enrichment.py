@@ -11,6 +11,64 @@ from backend.services.search import exa
 
 logger = logging.getLogger(__name__)
 
+GENERIC_EMAIL_DOMAINS: frozenset[str] = frozenset({
+    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com",
+    "yahoo.com", "yahoo.fr", "yahoo.co.uk", "protonmail.com", "proton.me",
+    "icloud.com", "me.com", "mac.com", "aol.com", "zoho.com", "yandex.com",
+    "mail.com", "gmx.com", "gmx.net", "fastmail.com", "tutanota.com",
+    "msn.com", "hey.com",
+})
+
+def extract_domain(email: str) -> str | None:
+    """Extract domain from email. Returns None for generic email providers."""
+    domain = email.rsplit("@", 1)[-1].lower()
+    if domain in GENERIC_EMAIL_DOMAINS:
+        return None
+    return domain
+
+
+async def enrich_fund_description(domain: str) -> str | None:
+    """Search the org's website via Exa and return a generated description."""
+    query = (
+        f"What does the organization at {domain} do? "
+        f"Investment focus, business model, target sectors, and stage preference."
+    )
+
+    try:
+        result = await exa.search(
+            query=query,
+            type="auto",
+            num_results=3,
+            include_domains=[domain],
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "fund_description": {
+                        "type": "string",
+                        "description": (
+                            "A 2-4 sentence description of the organization: what they do, "
+                            "their investment focus or business model, target sectors, "
+                            "and stage preference. Third-person perspective."
+                        ),
+                    },
+                },
+                "required": ["fund_description"],
+            },
+        )
+    except Exception:
+        logger.exception("Exa search failed for domain %s", domain)
+        raise
+
+    if not result.output or not result.output.content:
+        logger.warning("No output returned for %s", domain)
+        return None
+
+    content = result.output.content
+    if isinstance(content, dict):
+        return content.get("fund_description")
+    return content
+
+
 ENRICHMENT_SCHEMA = {
     "type": "object",
     "properties": {
