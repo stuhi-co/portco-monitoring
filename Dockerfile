@@ -7,9 +7,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-editable
 
-COPY alembic.ini alembic/ ./alembic/
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
 COPY templates/ ./templates/
-COPY src/ ./src/
+COPY src/backend/ ./src/backend/
 
 RUN uv sync --frozen --no-dev
 

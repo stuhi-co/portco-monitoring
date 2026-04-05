@@ -1,4 +1,4 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
 build/
@@ -11,3 +11,11 @@ wheels/
 
 # Environment
 .env
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+
+# OS
+.DS_Store

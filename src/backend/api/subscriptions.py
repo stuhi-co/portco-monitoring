@@ -99,6 +99,22 @@ async def subscribe(
     return _subscriber_to_response(subscriber)
 
 
+@router.get("/subscriptions/lookup", response_model=SubscriptionResponse)
+async def lookup_subscription(
+    email: str,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(Subscriber)
+        .where(Subscriber.email == email, Subscriber.is_active == True)
+        .options(selectinload(Subscriber.companies).selectinload(Company.industry))
+    )
+    subscriber = result.scalar_one_or_none()
+    if subscriber is None:
+        raise HTTPException(status_code=404, detail="No subscription found for this email")
+    return _subscriber_to_response(subscriber)
+
+
 @router.get("/subscriptions/{subscriber_id}", response_model=SubscriptionResponse)
 async def get_subscription(
     subscriber_id: UUID,
