@@ -1,13 +1,13 @@
 import logging
 from datetime import datetime, timezone
 
-from exa_py import Exa
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.database import Company, IndustryRecord
 from backend.schemas import Industry
+from backend.services.search import exa
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +39,17 @@ ENRICHMENT_SCHEMA = {
 
 async def enrich_company(session: AsyncSession, company: Company) -> None:
     """Enrich a company using the Exa Research API with outputSchema."""
-    exa = Exa(api_key=settings.exa_api_key)
-
     instructions = (
         f"Research the company '{company.name}'. Provide a concise profile including: "
         f"what they do, their market position, main competitors, and key topics to monitor."
     )
 
     try:
-        research = exa.research.create(
+        research = await exa.research.create(
             instructions=instructions,
             output_schema=ENRICHMENT_SCHEMA,
         )
-        result = exa.research.poll_until_finished(
+        result = await exa.research.poll_until_finished(
             research.research_id,
             timeout_ms=120_000,
         )

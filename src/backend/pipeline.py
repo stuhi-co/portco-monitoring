@@ -1,17 +1,20 @@
+import asyncio
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from backend.config import settings
-from backend.database import async_session_factory, Article, Company, Digest, Subscriber
+from backend.database import Article, Company, async_session_factory
 from backend.services.analysis import synthesize_company_developments
 from backend.services.digest import compile_digest
 from backend.services.email import send_digest_email
+from backend.services.repository import (
+    create_digest,
+    get_last_digest_end,
+    get_subscriber_with_companies,
+    load_existing_articles,
+)
 from backend.services.search import (
     SearchResult,
     search_company_news,
@@ -25,20 +28,15 @@ logger = logging.getLogger(__name__)
 async def run_digest_pipeline(subscriber_id: UUID) -> None:
     """Full pipeline: search → dedup → synthesize → compile → send."""
     async with async_session_factory() as session:
-        # Load subscriber with companies and industries
-        result = await session.execute(
-            select(Subscriber)
-            .where(Subscriber.id == subscriber_id)
-            .options(selectinload(Subscriber.companies).selectinload(Company.industry))
-        )
-        subscriber = result.scalar_one_or_none()
+        subscriber = await get_subscriber_with_companies(session, subscriber_id)
         if subscriber is None or not subscriber.is_active:
             logger.warning("Subscriber %s not found or inactive", subscriber_id)
             return
 
         # Determine time window
         period_end = datetime.now(timezone.utc)
-        period_start = await _get_period_start(session, subscriber_id, period_end)
+        last_end = await get_last_digest_end(session, subscriber_id)
+        period_start = last_end if last_end else period_end - timedelta(days=7)
 
         logger.info(
             "Running pipeline for %s (%s), period %s to %s",
@@ -73,13 +71,7 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
                 all_source_urls.update(d["source_urls"])
         total_articles = len(all_source_urls)
 
-        digest = Digest(
-            subscriber_id=subscriber.id,
-            period_start=period_start,
-            period_end=period_end,
-        )
-        session.add(digest)
-        await session.flush()
+        digest = await create_digest(session, subscriber.id, period_start, period_end)
 
         # ── Step 5: Compile digest HTML ───────────────────────────────────────
         companies_by_industry = _group_companies_by_industry(subscriber.companies)
@@ -125,27 +117,11 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
         )
 
 
-async def _get_period_start(
-    session: AsyncSession, subscriber_id: UUID, period_end: datetime
-) -> datetime:
-    """Get the start of the period — end of last digest, or 7 days ago."""
-    result = await session.execute(
-        select(Digest.period_end)
-        .where(Digest.subscriber_id == subscriber_id, Digest.sent_at.is_not(None))
-        .order_by(Digest.created_at.desc())
-        .limit(1)
-    )
-    last_end = result.scalar_one_or_none()
-    if last_end:
-        return last_end
-    return period_end - timedelta(days=7)
-
-
 async def _collect_news(
     companies: list[Company],
     start_date: datetime,
 ) -> tuple[dict[str, list[SearchResult]], dict[str, list[SearchResult]]]:
-    """Collect news for all companies and their industries.
+    """Collect news for all companies and their industries (in parallel).
 
     Returns:
         (by_company, by_industry) where:
@@ -154,40 +130,44 @@ async def _collect_news(
     """
     results: dict[str, list[SearchResult]] = defaultdict(list)
     industry_results_map: dict[str, list[SearchResult]] = {}
-    seen_industries: set[str] = set()
 
-    for company in companies:
+    # Fan out company + competitor searches in parallel
+    async def _search_for_company(company: Company) -> tuple[str, str | None]:
         industry_name = company.industry.name if company.industry else None
 
-        # Company news
-        company_results = await search_company_news(
-            company.name, industry_name, start_date
-        )
+        company_results = await search_company_news(company.name, industry_name, start_date)
         results[company.name].extend(company_results)
 
-        # Competitor news
         if company.competitors:
-            comp_results = await search_competitor_news(
-                company.competitors, industry_name, start_date
-            )
+            comp_results = await search_competitor_news(company.competitors, industry_name, start_date)
             results[company.name].extend(comp_results)
 
-        # Industry news (once per industry)
+        return company.name, industry_name
+
+    company_tasks = [_search_for_company(c) for c in companies]
+    company_results = await asyncio.gather(*company_tasks)
+
+    # Industry searches (one per unique industry, in parallel)
+    seen_industries: set[str] = set()
+    industry_tasks: dict[str, asyncio.Task[list[SearchResult]]] = {}
+    for _, industry_name in company_results:
         if industry_name and industry_name not in seen_industries:
             seen_industries.add(industry_name)
-            industry_results = await search_industry_news(industry_name, start_date)
-            industry_results_map[industry_name] = industry_results
-            # Also add to company pools for synthesis
+            industry_tasks[industry_name] = search_industry_news(industry_name, start_date)
+
+    if industry_tasks:
+        industry_results_list = await asyncio.gather(*industry_tasks.values())
+        for industry_name, ind_results in zip(industry_tasks.keys(), industry_results_list):
+            industry_results_map[industry_name] = ind_results
             for c in companies:
-                c_industry = c.industry.name if c.industry else None
-                if c_industry == industry_name:
-                    results[c.name].extend(industry_results)
+                if (c.industry and c.industry.name) == industry_name:
+                    results[c.name].extend(ind_results)
 
     return dict(results), industry_results_map
 
 
 async def _dedup_and_store_articles(
-    session: AsyncSession,
+    session,
     raw_results: dict[str, list[SearchResult]],
 ) -> dict[str, list[Article]]:
     """Deduplicate articles by URL and store new ones.
@@ -204,22 +184,13 @@ async def _dedup_and_store_articles(
                 all_results[sr.url] = (sr, [])
             all_results[sr.url][1].append(company_name)
 
-    # Check which URLs already exist
-    existing_urls = set()
-    if all_results:
-        url_list = list(all_results.keys())
-        result = await session.execute(
-            select(Article.url).where(Article.url.in_(url_list))
-        )
-        existing_urls = {row[0] for row in result.all()}
+    # Batch-load all existing articles in one query
+    existing_articles = await load_existing_articles(session, list(all_results.keys()))
 
-    # Store new articles
-    url_to_article: dict[str, Article] = {}
+    # Store new articles, reuse existing
     for url, (sr, company_names) in all_results.items():
-        if url in existing_urls:
-            # Load existing article
-            result = await session.execute(select(Article).where(Article.url == url))
-            article = result.scalar_one()
+        if url in existing_articles:
+            article = existing_articles[url]
         else:
             article = Article(
                 url=sr.url,
@@ -231,8 +202,6 @@ async def _dedup_and_store_articles(
             )
             session.add(article)
 
-        url_to_article[url] = article
-
         for cn in company_names:
             if article not in articles_by_company[cn]:
                 articles_by_company[cn].append(article)
@@ -242,23 +211,20 @@ async def _dedup_and_store_articles(
 
 
 async def _synthesize_all(
-    subscriber: Subscriber,
+    subscriber,
     articles_by_company: dict[str, list[Article]],
 ) -> dict[str, list[dict]]:
-    """Synthesize all articles for each company into deduplicated developments.
+    """Synthesize all articles for each company into deduplicated developments (in parallel).
 
     Returns: {company_name: [{development data}]}
     """
-    developments_by_company: dict[str, list[dict]] = {}
-
     company_map = {c.name: c for c in subscriber.companies}
 
-    for company_name, articles in articles_by_company.items():
+    async def _synthesize_one(company_name: str, articles: list[Article]) -> tuple[str, list[dict]]:
         company = company_map.get(company_name)
         if not company:
-            continue
+            return company_name, []
 
-        # Prepare articles for synthesis
         article_dicts = [
             {
                 "url": a.url,
@@ -271,7 +237,6 @@ async def _synthesize_all(
 
         industry_name = company.industry.name if company.industry else None
 
-        # Run Claude synthesis
         developments = await synthesize_company_developments(
             articles=article_dicts,
             company_name=company_name,
@@ -280,16 +245,17 @@ async def _synthesize_all(
             fund_description=subscriber.fund_description,
         )
 
-        # Filter by relevance threshold, sort, and limit
         filtered = [
             d.model_dump()
             for d in developments
             if d.relevance_score >= settings.relevance_threshold
         ]
         filtered.sort(key=lambda x: -x["relevance_score"])
-        developments_by_company[company_name] = filtered[:settings.max_developments_per_company]
+        return company_name, filtered[:settings.max_developments_per_company]
 
-    return developments_by_company
+    tasks = [_synthesize_one(name, arts) for name, arts in articles_by_company.items()]
+    results = await asyncio.gather(*tasks)
+    return {name: devs for name, devs in results if devs}
 
 
 def _group_companies_by_industry(companies: list[Company]) -> dict[str, list[dict]]:

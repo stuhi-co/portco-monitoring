@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import resend
@@ -16,12 +17,15 @@ async def send_digest_email(
 ) -> str | None:
     """Send a digest email via Resend. Returns the email ID or None on failure."""
     try:
-        result = resend.Emails.send({
-            "from": settings.email_from,
-            "to": [to_email],
-            "subject": subject,
-            "html": html_content,
-        })
+        result = await asyncio.to_thread(
+            resend.Emails.send,
+            {
+                "from": settings.email_from,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content,
+            },
+        )
         email_id = result.get("id") if isinstance(result, dict) else getattr(result, "id", None)
         logger.info("Sent digest to %s, email_id=%s", to_email, email_id)
         return email_id

@@ -2,11 +2,21 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from exa_py import Exa
+from exa_py import AsyncExa
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
+
+exa = AsyncExa(api_key=settings.exa_api_key)
+
+_retry_exa = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type(ValueError),
+    reraise=True,
+)
 
 
 @dataclass
@@ -43,14 +53,13 @@ def _parse_results(exa_results) -> list[SearchResult]:
     return parsed
 
 
+@_retry_exa
 async def search_company_news(
     company_name: str,
     industry: str | None,
     start_date: datetime | None,
 ) -> list[SearchResult]:
     """Search for recent news about a specific company."""
-    exa = Exa(api_key=settings.exa_api_key)
-
     industry_ctx = f" in {industry.replace('_', ' ')}" if industry else ""
     query = (
         f"Recent news about {company_name}: business developments, product launches, "
@@ -73,10 +82,11 @@ async def search_company_news(
         kwargs["start_published_date"] = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     logger.info("Searching news for %s", company_name)
-    result = exa.search(**kwargs)
+    result = await exa.search(**kwargs)
     return _parse_results(result)
 
 
+@_retry_exa
 async def search_competitor_news(
     competitors: list[str],
     industry: str | None,
@@ -85,8 +95,6 @@ async def search_competitor_news(
     """Search for news about a company's competitors."""
     if not competitors:
         return []
-
-    exa = Exa(api_key=settings.exa_api_key)
 
     comp_names = ", ".join(competitors[:5])
     industry_ctx = f" in {industry.replace('_', ' ')}" if industry else ""
@@ -111,17 +119,16 @@ async def search_competitor_news(
         kwargs["start_published_date"] = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     logger.info("Searching competitor news for %s", comp_names)
-    result = exa.search(**kwargs)
+    result = await exa.search(**kwargs)
     return _parse_results(result)
 
 
+@_retry_exa
 async def search_industry_news(
     industry: str,
     start_date: datetime | None,
 ) -> list[SearchResult]:
     """Search for broad industry trends and developments."""
-    exa = Exa(api_key=settings.exa_api_key)
-
     industry_label = industry.replace("_", " ")
     query = (
         f"Latest trends and developments in {industry_label}: market shifts, "
@@ -144,5 +151,5 @@ async def search_industry_news(
         kwargs["start_published_date"] = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     logger.info("Searching industry news for %s", industry_label)
-    result = exa.search(**kwargs)
+    result = await exa.search(**kwargs)
     return _parse_results(result)

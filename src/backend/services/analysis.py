@@ -2,6 +2,7 @@ import logging
 
 import anthropic
 from pydantic import BaseModel, Field
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from backend.config import settings
 from backend.prompts import (
@@ -15,7 +16,16 @@ from backend.schemas import ArticleCategory, Development
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+_retry_anthropic = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type(
+        (anthropic.APITimeoutError, anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError)
+    ),
+    reraise=True,
+)
 
 
 # ── LLM output models (index-based, never exposed outside this module) ───────
@@ -40,6 +50,7 @@ class _SynthesisResponse(BaseModel):
 # ── Synthesis ────────────────────────────────────────────────────────────────
 
 
+@_retry_anthropic
 async def synthesize_company_developments(
     articles: list[dict],
     company_name: str,
@@ -67,7 +78,7 @@ async def synthesize_company_developments(
     )
 
     try:
-        response = client.messages.parse(
+        response = await client.messages.parse(
             model=settings.claude_model,
             max_tokens=2000,
             system=SYNTHESIS_SYSTEM_PROMPT,
@@ -105,6 +116,8 @@ async def synthesize_company_developments(
 
         return developments
 
+    except (anthropic.APITimeoutError, anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError):
+        raise  # Let tenacity handle retries
     except Exception:
         logger.exception("Failed to synthesize developments for %s", company_name)
         return []
@@ -113,6 +126,7 @@ async def synthesize_company_developments(
 # ── Digest text generation ───────────────────────────────────────────────────
 
 
+@_retry_anthropic
 async def generate_executive_overview(
     developments_by_company: dict[str, list[dict]],
     fund_description: str | None,
@@ -133,7 +147,7 @@ async def generate_executive_overview(
         fund_description=fund_description,
     )
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model=settings.claude_model,
         max_tokens=300,
         system=DIGEST_SYSTEM_PROMPT,
@@ -142,6 +156,7 @@ async def generate_executive_overview(
     return response.content[0].text.strip()
 
 
+@_retry_anthropic
 async def generate_industry_pulse(
     industry_name: str,
     articles: list[dict],
@@ -158,7 +173,7 @@ async def generate_industry_pulse(
         articles=articles,
     )
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model=settings.claude_model,
         max_tokens=150,
         system=DIGEST_SYSTEM_PROMPT,
