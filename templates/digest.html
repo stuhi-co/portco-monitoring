@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Intelligence Digest</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
+<tr><td align="center">
+<table width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+
+  <!-- Header -->
+  <tr>
+    <td style="background:#1a1a2e;padding:32px 40px;">
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:600;letter-spacing:-0.3px;">Portfolio Intelligence</h1>
+      <p style="margin:6px 0 0;color:#a0a0b8;font-size:13px;">{{ period_start }} – {{ period_end }} &middot; {{ total_articles }} articles analyzed</p>
+    </td>
+  </tr>
+
+  <!-- Executive Overview -->
+  <tr>
+    <td style="padding:32px 40px 24px;">
+      <h2 style="margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:0.8px;color:#6b7280;">Executive Overview</h2>
+      <p style="margin:0;font-size:15px;line-height:1.65;color:#1f2937;">{{ executive_overview }}</p>
+    </td>
+  </tr>
+
+  {% for section in industry_sections %}
+  <!-- Industry Section: {{ section.name }} -->
+  <tr>
+    <td style="padding:8px 40px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:20px 0 12px;border-top:2px solid #1a1a2e;">
+            <h2 style="margin:0;font-size:16px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.5px;">{{ section.name }}</h2>
+            <p style="margin:6px 0 0;font-size:13px;line-height:1.5;color:#6b7280;font-style:italic;">{{ section.pulse }}</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  {% for company in section.companies %}
+  <!-- Company: {{ company.name }} -->
+  <tr>
+    <td style="padding:4px 40px 16px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:12px 0 8px;">
+            <h3 style="margin:0;font-size:15px;font-weight:700;color:#374151;">&#9656; {{ company.name | upper }}</h3>
+          </td>
+        </tr>
+
+        {% for a in company.analyses %}
+        <tr>
+          <td style="padding:8px 0 12px 16px;{% if not loop.last %}border-bottom:1px solid #f0f0f0;{% endif %}">
+            <!-- Category + competitor badge -->
+            <p style="margin:0 0 4px;">
+              {% if a.is_competitor_alert %}
+              <span style="display:inline-block;background:#fef2f2;color:#dc2626;font-size:11px;font-weight:600;padding:2px 8px;border-radius:3px;text-transform:uppercase;">&#9888; {{ a.category | replace('_', ' ') }}</span>
+              {% else %}
+              <span style="display:inline-block;background:#f0f9ff;color:#0369a1;font-size:11px;font-weight:600;padding:2px 8px;border-radius:3px;text-transform:uppercase;">{{ a.category | replace('_', ' ') }}</span>
+              {% endif %}
+            </p>
+            <!-- Title -->
+            <p style="margin:4px 0;font-size:14px;font-weight:600;color:#1f2937;">
+              <a href="{{ a.url }}" style="color:#1f2937;text-decoration:none;">{{ a.title or 'Untitled' }}</a>
+            </p>
+            <!-- Summary (from Exa) -->
+            {% if a.summary %}
+            <p style="margin:4px 0;font-size:13px;line-height:1.5;color:#6b7280;">&ldquo;{{ a.summary }}&rdquo;</p>
+            {% endif %}
+            <!-- PE Insight -->
+            <p style="margin:6px 0 0;font-size:13px;line-height:1.5;color:#059669;font-weight:500;">&rarr; So What: {{ a.pe_insight }}</p>
+          </td>
+        </tr>
+        {% endfor %}
+
+      </table>
+    </td>
+  </tr>
+  {% endfor %}
+  {% endfor %}
+
+  <!-- Footer -->
+  <tr>
+    <td style="padding:24px 40px 32px;border-top:1px solid #e5e7eb;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">
+        {{ period_start }} – {{ period_end }} &middot; {{ total_articles }} articles analyzed<br>
+        <a href="{{ unsubscribe_url }}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a>
+        &middot; Powered by <strong>Stuhi Intelligence</strong>
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>
