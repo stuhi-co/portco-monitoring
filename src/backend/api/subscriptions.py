@@ -16,10 +16,43 @@ from backend.schemas import (
     SubscriptionResponse,
     SubscriptionUpdate,
 )
+from backend.config import settings
 from backend.services.enrichment import enrich_fund_description, extract_domain
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["subscriptions"])
+
+INDUSTRY_LABELS: dict[str, str] = {
+    "ai_ml": "AI/ML",
+    "biotech": "Biotech",
+    "cleantech": "CleanTech",
+    "cloud_infrastructure": "Cloud Infrastructure",
+    "communications": "Communications",
+    "construction_tech": "Construction Tech",
+    "crypto_web3": "Crypto/Web3",
+    "cybersecurity": "Cybersecurity",
+    "data_analytics": "Data Analytics",
+    "devops": "DevOps",
+    "ecommerce": "E-Commerce",
+    "edtech": "EdTech",
+    "enterprise_software": "Enterprise Software",
+    "fintech": "FinTech",
+    "food_and_delivery": "Food & Delivery",
+    "gaming": "Gaming",
+    "govtech_defense": "GovTech/Defense",
+    "healthtech": "HealthTech",
+    "hr_tech": "HR Tech",
+    "insurtech": "InsurTech",
+    "legal_tech": "Legal Tech",
+    "martech": "MarTech",
+    "media_entertainment": "Media & Entertainment",
+    "mobility_transport": "Mobility & Transport",
+    "proptech": "PropTech",
+    "social_and_creator": "Social & Creator",
+    "supply_chain": "Supply Chain",
+    "travel_hospitality": "Travel & Hospitality",
+    "other": "Other",
+}
 
 
 async def _get_or_create_industry(session: AsyncSession, name: str) -> IndustryRecord:
@@ -178,6 +211,12 @@ async def update_subscription(
 
     new_companies_added = False
     if body.add_companies:
+        current_count = len(subscriber.companies)
+        if current_count + len(body.add_companies) > settings.max_companies_per_subscription:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Cannot exceed {settings.max_companies_per_subscription} companies per subscription",
+            )
         for comp in body.add_companies:
             industry_rec = None
             if comp.industry:
@@ -228,7 +267,7 @@ async def unsubscribe(
 
 @router.get("/industries")
 async def list_industries():
-    return [{"value": i.value, "label": i.value.replace("_", " ").title()} for i in Industry]
+    return [{"value": i.value, "label": INDUSTRY_LABELS.get(i.value, i.value.replace("_", " ").title())} for i in Industry]
 
 
 @router.get("/health")

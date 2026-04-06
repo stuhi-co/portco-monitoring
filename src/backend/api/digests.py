@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -6,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import settings
 from backend.database import get_session, Digest, Subscriber
 from backend.schemas import DigestSummary
 
@@ -58,6 +60,29 @@ async def trigger_digest(
         raise HTTPException(status_code=404, detail="Subscription not found")
     if not subscriber.is_active:
         raise HTTPException(status_code=400, detail="Subscription is inactive")
+
+    # Cooldown check
+    latest_result = await session.execute(
+        select(Digest)
+        .where(Digest.subscriber_id == subscriber_id)
+        .order_by(Digest.created_at.desc())
+        .limit(1)
+    )
+    latest_digest = latest_result.scalar_one_or_none()
+    if latest_digest is not None:
+        cooldown = timedelta(hours=settings.digest_cooldown_hours)
+        created = latest_digest.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        elapsed = datetime.now(timezone.utc) - created
+        if elapsed < cooldown:
+            remaining = cooldown - elapsed
+            hours, remainder = divmod(int(remaining.total_seconds()), 3600)
+            minutes = remainder // 60
+            raise HTTPException(
+                status_code=429,
+                detail=f"Please wait {hours}h {minutes}m before generating another digest",
+            )
 
     background_tasks.add_task(_run_pipeline, subscriber_id)
     return {"message": "Digest generation started", "subscriber_id": str(subscriber_id)}

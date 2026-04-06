@@ -22,12 +22,14 @@ import {
 } from "@/components/ui/select";
 import { useIndustries, useUpdateSubscription } from "@/lib/hooks";
 import type { Industry } from "@/lib/api";
+import { MAX_COMPANIES } from "@/lib/config";
 
 interface AddCompanyDialogProps {
   subscriptionId: string;
+  companyCount: number;
 }
 
-export function AddCompanyDialog({ subscriptionId }: AddCompanyDialogProps) {
+export function AddCompanyDialog({ subscriptionId, companyCount }: AddCompanyDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
@@ -55,9 +57,9 @@ export function AddCompanyDialog({ subscriptionId }: AddCompanyDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>
+      <DialogTrigger render={<Button variant="outline" size="sm" disabled={companyCount >= MAX_COMPANIES} />}>
         <Plus className="mr-1 h-4 w-4" />
-        Add Company
+        {companyCount >= MAX_COMPANIES ? `Limit reached (${MAX_COMPANIES})` : "Add Company"}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -82,7 +84,7 @@ export function AddCompanyDialog({ subscriptionId }: AddCompanyDialogProps) {
               </SelectTrigger>
               <SelectContent>
                 {industries?.map((ind) => (
-                  <SelectItem key={ind.value} value={ind.value}>
+                  <SelectItem key={ind.value} value={ind.value} label={ind.label}>
                     {ind.label}
                   </SelectItem>
                 ))}

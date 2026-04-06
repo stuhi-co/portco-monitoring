@@ -32,7 +32,7 @@ export function DigestList({ subscriptionId }: DigestListProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Past Digests</h2>
-        <TriggerDigestButton subscriptionId={subscriptionId} />
+        <TriggerDigestButton subscriptionId={subscriptionId} digests={digests} />
       </div>
 
       {isLoading && (

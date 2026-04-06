@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     max_key_developments: int = 3
     max_notable_developments: int = 2
 
+    # Subscription limits
+    max_companies_per_subscription: int = 10
+    digest_cooldown_hours: int = 24
+
     # Email
     email_from: str = "Ana Llana <ana@stuhi.co>"
     app_base_url: str = "http://localhost:8000"

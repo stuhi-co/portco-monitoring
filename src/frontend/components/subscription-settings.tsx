@@ -7,18 +7,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useUpdateSubscription, useDeleteSubscription, useGenerateFundDescription } from "@/lib/hooks";
 import { clearSubscriptionId } from "@/lib/subscription";
-import { ApiError, type Frequency, type SubscriptionResponse } from "@/lib/api";
+import { ApiError, type SubscriptionResponse } from "@/lib/api";
 
 interface SubscriptionSettingsProps {
   subscription: SubscriptionResponse;
@@ -32,9 +25,6 @@ export function SubscriptionSettings({
   const deleteMutation = useDeleteSubscription();
   const generateMutation = useGenerateFundDescription();
 
-  const [frequency, setFrequency] = useState<Frequency>(
-    subscription.frequency
-  );
   const [fundDescription, setFundDescription] = useState(
     subscription.fund_description ?? ""
   );
@@ -44,7 +34,6 @@ export function SubscriptionSettings({
     e.preventDefault();
     try {
       await updateMutation.mutateAsync({
-        frequency,
         fund_description: fundDescription.trim() || null,
       });
       toast.success("Settings updated");
@@ -81,22 +70,6 @@ export function SubscriptionSettings({
               <p className="text-sm text-muted-foreground">
                 {subscription.email}
               </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="settings-frequency">Digest Frequency</Label>
-              <Select
-                value={frequency}
-                onValueChange={(v) => v && setFrequency(v as Frequency)}
-              >
-                <SelectTrigger id="settings-frequency">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">

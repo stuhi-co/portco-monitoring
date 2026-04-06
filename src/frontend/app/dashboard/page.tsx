@@ -78,7 +78,7 @@ export default function DashboardPage() {
                 <h2 className="text-lg font-semibold">
                   Your Companies ({subscription.companies.length})
                 </h2>
-                <AddCompanyDialog subscriptionId={subscription.id} />
+                <AddCompanyDialog subscriptionId={subscription.id} companyCount={subscription.companies.length} />
               </div>
               {subscription.companies.length === 0 ? (
                 <p className="text-sm text-muted-foreground">

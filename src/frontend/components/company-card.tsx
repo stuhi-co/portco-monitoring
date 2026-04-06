@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CompanyResponse } from "@/lib/api";
+import { getIndustryLabel } from "@/lib/config";
 
 interface CompanyCardProps {
   company: CompanyResponse;
@@ -23,7 +24,7 @@ export function CompanyCard({ company, onRemove, removing }: CompanyCardProps) {
           <div className="flex items-center gap-2">
             {company.industry && (
               <Badge variant="secondary" className="text-xs">
-                {company.industry.replace(/_/g, " ")}
+                {getIndustryLabel(company.industry)}
               </Badge>
             )}
             {isEnriching ? (

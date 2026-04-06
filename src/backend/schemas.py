@@ -76,7 +76,7 @@ class GenerateFundDescriptionRequest(BaseModel):
 
 class SubscribeRequest(BaseModel):
     email: EmailStr
-    companies: list[CompanyInput] = Field(min_length=1, max_length=50)
+    companies: list[CompanyInput] = Field(min_length=1, max_length=10)
     frequency: Frequency = Frequency.weekly
     fund_description: str | None = None
 
