@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     max_companies_per_subscription: int = 10
     digest_cooldown_hours: int = 24
 
+    # CORS
+    allowed_origins: list[str] = ["http://localhost:3000"]
+
     # Email
     email_from: str = "Ana Llana <ana@stuhi.co>"
     app_base_url: str = "http://localhost:8000"

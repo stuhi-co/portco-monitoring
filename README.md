@@ -21,13 +21,12 @@ Automated news digests for PE portfolio companies. Subscribe with your email and
 Go to **[news.stuhi.co](https://news.stuhi.co)** and subscribe — no setup needed.
 
 1. Enter your email and add your portfolio companies
-2. Pick a digest frequency (weekly or daily)
-3. Optionally describe your fund's focus for more relevant insights
-4. Hit **Subscribe**
+2. Optionally describe your fund's focus for more relevant insights
+3. Hit **Subscribe**
 
 You'll land on your dashboard where you can watch companies get enriched in real-time, trigger a digest on demand, browse past digests, and manage your settings.
 
-If you clear your browser data, use the **"Already subscribed?"** field on the home page to recover your account by email.
+If you clear your browser data, use the **Sign In** tab on the home page to recover your account by email.
 
 ---
 
@@ -100,51 +99,122 @@ cd src/frontend && pnpm install && cd ../..
 
 ---
 
-## Deploy on a VPS
+## Deploy to production
 
-For running your own persistent instance on a server.
+The recommended setup splits frontend and backend:
 
-### 1. Provision a server
+- **Frontend** (Next.js) on **Vercel** — free tier, automatic SSL, edge CDN
+- **Backend** (FastAPI + PostgreSQL) on a **VPS** — any provider (GCP, Hetzner, DigitalOcean, etc.)
 
-Any VPS with Docker installed works (Hetzner, DigitalOcean, AWS EC2, etc.). Clone the repo and copy your `.env` file onto the server.
+Architecture: `yourdomain.com` → Vercel → (rewrites `/api/*`) → `api.yourdomain.com` → VPS
 
-### 2. Update `.env` for production
+### 1. DNS setup (your domain registrar)
 
-On top of the three API keys, update these:
+Add two records pointing to your domain (e.g. on GoDaddy, Cloudflare, etc.):
+
+| Type | Name | Value |
+|------|------|-------|
+| CNAME | `news` | `cname.vercel-dns.com` |
+| A | `api.news` | `<your VPS IP>` |
+
+### 2. Deploy the backend (VPS)
+
+**Provision a server** — a small VM works (e.g. GCP e2-small, Hetzner CX22). SSH in, then:
+
+```bash
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+
+# Clone the repo
+git clone <repo-url>
+cd portco-monitoring
+
+# Configure
+cp .env.example .env
+```
+
+**Edit `.env`** with your production values:
 
 | Variable | What to set |
 |----------|-------------|
-| `POSTGRES_PASSWORD` | A strong, random password |
-| `DATABASE_URL` | Must match — `postgresql+asyncpg://portco:YOUR_PASSWORD@localhost:5432/portco_monitoring` |
-| `APP_BASE_URL` | Your public URL, e.g. `https://intel.yourdomain.com` (used in unsubscribe links) |
+| `EXA_API_KEY` | Your Exa key |
+| `ANTHROPIC_API_KEY` | Your Anthropic key |
+| `RESEND_API_KEY` | Your Resend key |
+| `POSTGRES_PASSWORD` | A strong random password |
+| `DATABASE_URL` | `postgresql+asyncpg://portco:YOUR_PASSWORD@db:5432/portco_monitoring` |
+| `APP_BASE_URL` | `https://news.yourdomain.com` (used in unsubscribe links) |
+| `ALLOWED_ORIGINS` | `["https://news.yourdomain.com"]` |
 | `EMAIL_FROM` | Must match your Resend verified domain |
 
-Optional scheduling overrides:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DIGEST_CRON_HOUR` | `8` | Hour (UTC) to send digests |
-| `DIGEST_CRON_DAY_OF_WEEK` | `mon` | Day of week for weekly digests |
-
-### 3. Start
+**Install Caddy** as a reverse proxy (auto-HTTPS, zero config):
 
 ```bash
-./start.sh
+sudo apt install -y caddy
 ```
 
-Point your domain to the server's IP and set up a reverse proxy (nginx/Caddy) to forward traffic to port `3000`.
+Create `/etc/caddy/Caddyfile`:
 
-### Cost estimate (self-hosted)
+```
+api.news.yourdomain.com {
+    reverse_proxy localhost:8000
+}
+```
+
+```bash
+sudo systemctl restart caddy
+```
+
+**Start the backend** (only db + backend, not the frontend container):
+
+```bash
+docker compose up -d db backend
+# Wait for db, then run migrations
+docker compose exec backend uv run alembic upgrade head
+```
+
+Verify it works: `curl https://api.news.yourdomain.com/api/health`
+
+### 3. Deploy the frontend (Vercel)
+
+1. Push your repo to GitHub
+2. Go to [vercel.com/new](https://vercel.com/new), import the repo
+3. Set **Root Directory** to `src/frontend`
+4. Add one environment variable:
+   - `BACKEND_URL` = `https://api.news.yourdomain.com`
+5. Deploy
+6. In Vercel project settings → **Domains**, add `news.yourdomain.com`
+
+The `next.config.ts` rewrite rule (`/api/*` → `BACKEND_URL/api/*`) means all API calls are proxied server-side through Vercel. The browser never talks to the backend directly, so CORS doesn't even come into play in this setup.
+
+### Important: CORS
+
+CORS is configured via the `ALLOWED_ORIGINS` environment variable (defaults to `["http://localhost:3000"]`).
+
+- **With Vercel rewrites** (recommended): CORS headers are technically not needed since Vercel proxies API calls server-side. But `ALLOWED_ORIGINS` is set as defense-in-depth.
+- **Without Vercel** (e.g. frontend served directly from a CDN or different host): CORS is **required**. Set `ALLOWED_ORIGINS` to your frontend's origin, e.g. `["https://news.yourdomain.com"]`. Without this, the browser will block all API calls.
+
+### 4. Verify
+
+- `https://news.yourdomain.com` — should load the frontend
+- Sign in / subscribe should work (API calls proxied through Vercel to the VPS)
+- Trigger a digest and confirm it generates
+
+### Cost estimate
 
 For 10 companies with weekly digests, per month:
 
 | Service | Cost |
 |---------|------|
+| Vercel (frontend) | Free |
+| VPS (e.g. GCP e2-small) | ~$7 |
 | Exa (search + enrichment) | ~$1 |
 | Claude (analysis) | ~$2-3 |
 | Resend (emails) | Free tier |
-| VPS (e.g. Hetzner CX22) | ~$4 |
-| **Total** | **~$7-8/month** |
+| **Total** | **~$10-11/month** |
+
+### Alternative: all-in-one VPS
+
+If you don't want Vercel, run everything on the VPS with `./start.sh` (uses Docker Compose for db + backend + frontend). Point your domain to the VPS IP and configure Caddy to reverse-proxy port `3000`. In this case, set `ALLOWED_ORIGINS` to your frontend's public URL.
 
 ---
 

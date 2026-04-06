@@ -3,9 +3,11 @@ from contextlib import asynccontextmanager
 
 from apscheduler import AsyncScheduler
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.digests import router as digests_router
 from backend.api.subscriptions import router as subscriptions_router
+from backend.config import settings
 from backend.scheduler import get_digest_trigger, run_all_digests
 
 logging.basicConfig(
@@ -34,6 +36,13 @@ app = FastAPI(
     description="PE portfolio company news intelligence — automated digests with PE-focused insights",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(subscriptions_router)
