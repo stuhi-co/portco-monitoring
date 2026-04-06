@@ -28,7 +28,7 @@ def extract_domain(email: str) -> str | None:
 
 
 async def enrich_fund_description(domain: str) -> str | None:
-    """Search the org's website via Exa and return a generated description."""
+    """Search the web for info about the org and return a generated description."""
     query = (
         f"What does the organization at {domain} do? "
         f"Investment focus, business model, target sectors, and stage preference."
@@ -39,7 +39,7 @@ async def enrich_fund_description(domain: str) -> str | None:
             query=query,
             type="auto",
             num_results=3,
-            include_domains=[domain],
+            category="company",
             output_schema={
                 "type": "object",
                 "properties": {
