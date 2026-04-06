@@ -46,6 +46,21 @@ class _SynthesisResponse(BaseModel):
     developments: list[_LLMDevelopment]
 
 
+class _BulletPoint(BaseModel):
+    text: str = Field(
+        description="One punchy sentence about a key portfolio development. "
+        "State what happened and why it matters. No filler."
+    )
+
+
+class _ExecutiveOverviewResponse(BaseModel):
+    bullets: list[_BulletPoint] = Field(
+        min_length=1,
+        max_length=5,
+        description="Up to 5 key developments across the portfolio.",
+    )
+
+
 # ── Synthesis ────────────────────────────────────────────────────────────────
 
 
@@ -129,8 +144,8 @@ async def synthesize_company_developments(
 async def generate_executive_overview(
     developments_by_company: dict[str, list[dict]],
     fund_description: str | None,
-) -> str:
-    """Generate the executive overview for the top of the digest."""
+) -> list[str]:
+    """Generate the executive overview for the top of the digest as bullet points."""
     summary_parts = []
     for company_name, developments in developments_by_company.items():
         relevant = [d for d in developments if d.get("relevance_score", 0) >= settings.relevance_threshold]
@@ -139,17 +154,31 @@ async def generate_executive_overview(
             summary_parts.append(f"- {company_name}: {insights}")
 
     if not summary_parts:
-        return "No significant portfolio developments this period."
+        return ["No significant portfolio developments this period."]
 
     prompt = build_executive_overview_prompt(
         company_summary="\n".join(summary_parts),
         fund_description=fund_description,
     )
 
-    response = await client.messages.create(
-        model=settings.claude_model,
-        max_tokens=200,
-        system=DIGEST_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text.strip()
+    try:
+        response = await client.messages.parse(
+            model=settings.claude_model,
+            max_tokens=400,
+            system=DIGEST_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+            output_format=_ExecutiveOverviewResponse,
+        )
+
+        parsed = response.parsed_output
+        if not parsed:
+            logger.error("No parsed output in executive overview response")
+            return ["No significant portfolio developments this period."]
+
+        return [b.text for b in parsed.bullets]
+
+    except (anthropic.APITimeoutError, anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError):
+        raise  # Let tenacity handle retries
+    except Exception:
+        logger.exception("Failed to generate executive overview")
+        return ["No significant portfolio developments this period."]
