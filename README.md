@@ -117,7 +117,7 @@ Add two records pointing to your domain (e.g. on GoDaddy, Cloudflare, etc.):
 
 ### 2. Deploy the backend (VPS)
 
-**Provision a server** — a small VM works (e.g. GCP e2-small, Hetzner CX22). SSH in, then:
+**Provision a server** — a small VM works (e.g. GCP e2-small, Hetzner CX22). Make sure you allow HTTP and HTTPS traffic in Network settings. SSH in, then:
 
 ```bash
 # Install Docker
@@ -132,6 +132,7 @@ cd portco-monitoring
 
 # Configure
 cp .env.example .env
+sudo nano .env
 ```
 
 **Edit `.env`** with your production values:
@@ -176,6 +177,19 @@ docker compose exec backend uv run alembic upgrade head
 ```
 
 Verify it works: `curl https://api.news.yourdomain.com/api/health`
+
+**Updating the code / env variables**
+After a change in the code, env variables, or pulling the changes from the public repo, to build the VPS, use"
+```bash
+# Rebuild and restart only backend (db volume is preserved)
+docker compose up -d --build backend
+# Restart without rebuilding (e.g. just changed .env)
+docker compose restart backend
+# Check db data is still there
+docker compose exec db psql -U portco -d portco_monitoring -c "SELECT count(*) FROM subscribers;"
+```
+
+WARNING: The only thing that would delete data is docker compose down -v (the -v flag removes volumes). Never use -v unless you intentionally want to wipe the database.
 
 ### 3. Deploy the frontend (Vercel)
 
