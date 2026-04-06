@@ -4,7 +4,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 from backend.config import settings
-from backend.services.analysis import generate_executive_overview, generate_industry_pulse
+from backend.services.analysis import generate_executive_overview
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,6 @@ async def compile_digest(
     fund_description: str | None,
     companies_by_industry: dict[str, list[dict]],
     developments_by_company: dict[str, list[dict]],
-    industry_articles: dict[str, list[dict]],
     period_start: str,
     period_end: str,
 ) -> tuple[str, str]:
@@ -27,7 +26,6 @@ async def compile_digest(
     Args:
         companies_by_industry: {industry_name: [{name, id, ...}]}
         developments_by_company: {company_name: [{development data}]}
-        industry_articles: {industry_name: [{title, summary}]}
         period_start/end: formatted date strings
 
     Returns:
@@ -36,7 +34,7 @@ async def compile_digest(
     # Generate executive overview
     executive_overview = await generate_executive_overview(developments_by_company, fund_description)
 
-    # Generate industry pulses and organize data for template
+    # Organize data for template
     industry_sections = []
     total_articles = 0
 
@@ -66,15 +64,9 @@ async def compile_digest(
                     "notable_developments": notable_devs,
                 })
 
-        # Generate industry pulse from broad industry articles (not company developments)
-        industry_pulse = await generate_industry_pulse(
-            industry_name, industry_articles.get(industry_name, [])
-        )
-
         if company_sections:
             industry_sections.append({
                 "name": industry_name.replace("_", " ").title(),
-                "pulse": industry_pulse,
                 "companies": company_sections,
             })
 

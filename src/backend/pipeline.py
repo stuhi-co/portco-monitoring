@@ -48,7 +48,7 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
         )
 
         # ── Step 1: Search ────────────────────────────────────────────────────
-        raw_results, industry_articles = await _collect_news(subscriber.companies, period_start)
+        raw_results = await _collect_news(subscriber.companies, period_start)
 
         if not raw_results:
             logger.info("No news found for subscriber %s", subscriber.email)
@@ -91,22 +91,12 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
         period_start_str = period_start.strftime("%b %d")
         period_end_str = period_end.strftime("%b %d, %Y")
 
-        # Convert industry SearchResults to dicts for the digest layer
-        industry_article_dicts = {
-            industry: [
-                {"title": sr.title or "", "summary": sr.summary or ""}
-                for sr in results
-            ]
-            for industry, results in industry_articles.items()
-        }
-
         subject, html = await compile_digest(
             subscriber_email=subscriber.email,
             subscriber_id=str(subscriber.id),
             fund_description=subscriber.fund_description,
             companies_by_industry=companies_by_industry,
             developments_by_company=developments_by_company,
-            industry_articles=industry_article_dicts,
             period_start=period_start_str,
             period_end=period_end_str,
         )
@@ -132,16 +122,13 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
 async def _collect_news(
     companies: list[Company],
     start_date: datetime,
-) -> tuple[dict[str, list[SearchResult]], dict[str, list[SearchResult]]]:
+) -> dict[str, list[SearchResult]]:
     """Collect news for all companies and their industries (in parallel).
 
     Returns:
-        (by_company, by_industry) where:
-        - by_company: {company_name: [SearchResult, ...]}
-        - by_industry: {industry_name: [SearchResult, ...]}
+        {company_name: [SearchResult, ...]}
     """
     results: dict[str, list[SearchResult]] = defaultdict(list)
-    industry_results_map: dict[str, list[SearchResult]] = {}
 
     # Fan out company + competitor searches in parallel
     async def _search_for_company(company: Company) -> tuple[str, str | None]:
@@ -170,12 +157,11 @@ async def _collect_news(
     if industry_tasks:
         industry_results_list = await asyncio.gather(*industry_tasks.values())
         for industry_name, ind_results in zip(industry_tasks.keys(), industry_results_list):
-            industry_results_map[industry_name] = ind_results
             for c in companies:
                 if (c.industry and c.industry.name) == industry_name:
                     results[c.name].extend(ind_results)
 
-    return dict(results), industry_results_map
+    return dict(results)
 
 
 async def _dedup_and_store_articles(

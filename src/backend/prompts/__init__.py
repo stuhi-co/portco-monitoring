@@ -5,7 +5,6 @@ from backend.prompts.synthesis import (
 from backend.prompts.digest import (
     DIGEST_SYSTEM_PROMPT,
     build_executive_overview_prompt,
-    build_industry_pulse_prompt,
 )
 
 __all__ = [
@@ -13,5 +12,4 @@ __all__ = [
     "build_synthesis_prompt",
     "DIGEST_SYSTEM_PROMPT",
     "build_executive_overview_prompt",
-    "build_industry_pulse_prompt",
 ]

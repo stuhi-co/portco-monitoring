@@ -9,7 +9,6 @@ from backend.prompts import (
     DIGEST_SYSTEM_PROMPT,
     SYNTHESIS_SYSTEM_PROMPT,
     build_executive_overview_prompt,
-    build_industry_pulse_prompt,
     build_synthesis_prompt,
 )
 from backend.schemas import ArticleCategory, Development
@@ -150,32 +149,6 @@ async def generate_executive_overview(
     response = await client.messages.create(
         model=settings.claude_model,
         max_tokens=200,
-        system=DIGEST_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text.strip()
-
-
-@_retry_anthropic
-async def generate_industry_pulse(
-    industry_name: str,
-    articles: list[dict],
-) -> str:
-    """Generate a broad industry pulse from raw Exa industry articles.
-
-    Each article dict should have: title, summary.
-    """
-    if not articles:
-        return f"No significant developments in {industry_name.replace('_', ' ')} this period."
-
-    prompt = build_industry_pulse_prompt(
-        industry_name=industry_name,
-        articles=articles,
-    )
-
-    response = await client.messages.create(
-        model=settings.claude_model,
-        max_tokens=150,
         system=DIGEST_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
