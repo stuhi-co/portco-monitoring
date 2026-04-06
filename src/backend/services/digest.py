@@ -13,7 +13,6 @@ _jinja_env = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), autoescape
 
 
 async def compile_digest(
-    subscriber_email: str,
     subscriber_id: str,
     fund_description: str | None,
     companies_by_industry: dict[str, list[dict]],

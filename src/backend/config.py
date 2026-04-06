@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:8000"
 
     # Scheduler
-    digest_cron_hour: int = 8
+    digest_cron_hour: int = 16  # 4:00 PM UTC = 8:00 AM PT
     digest_cron_day_of_week: str = "mon"
 
     # LLM

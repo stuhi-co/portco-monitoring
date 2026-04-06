@@ -10,13 +10,14 @@ def build_executive_overview_prompt(
     fund_description: str | None,
 ) -> str:
     return f"""\
-Write the executive overview for a PE fund's weekly portfolio intelligence digest.
+Summarize the key developments below in a brief executive overview.
 
-FUND CONTEXT: {fund_description or 'Growth equity fund'}
+{'FUND CONTEXT: ' + fund_description if fund_description else ''}
 
 KEY DEVELOPMENTS:
 {company_summary}
 
-Write EXACTLY 2-3 plain-text sentences on the most important cross-portfolio themes: \
-competitive dynamics, sector shifts, and actionable signals for the investment team. \
+Be straight to the point — just state what happened and why it matters. \
+No fluff, no filler phrases, no generic commentary. \
+Keep it short but cover every important development. \
 Do NOT use markdown formatting. Output plain text only."""

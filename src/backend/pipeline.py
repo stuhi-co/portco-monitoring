@@ -92,7 +92,6 @@ async def run_digest_pipeline(subscriber_id: UUID) -> None:
         period_end_str = period_end.strftime("%b %d, %Y")
 
         subject, html = await compile_digest(
-            subscriber_email=subscriber.email,
             subscriber_id=str(subscriber.id),
             fund_description=subscriber.fund_description,
             companies_by_industry=companies_by_industry,
