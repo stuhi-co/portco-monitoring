@@ -4,13 +4,11 @@ Automated news digests for PE portfolio companies. Subscribe with your email and
 
 ## How it works
 
-1. **You subscribe** with your email + company names (e.g. "Datadog", "Snowflake")
+1. **You subscribe** with your email + portfolio company names (e.g. "Datadog", "Snowflake")
 2. **The system enriches** each company — detects industry, finds competitors, identifies key topics
-3. **On a schedule** (weekly or daily), the system:
+3. **On a schedule** (by default weekly 8am PT), the system:
    - Searches for news about each company, their competitors, and their industry
    - Deduplicates articles so you never see the same one twice
-   - Scores each article for PE relevance using Claude
-   - Generates a "So What" PE insight for each article
    - Compiles everything into a professional email digest
 4. **You receive** a digest grouped by industry, with an executive overview, competitor alerts, and actionable insights
 
@@ -45,7 +43,7 @@ If you prefer to self-host (your own data, your own API keys), there are two opt
 ### 1. Clone and configure
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/stuhi-co/portco-monitoring.git
 cd portco-monitoring
 cp .env.example .env
 ```
@@ -124,9 +122,12 @@ Add two records pointing to your domain (e.g. on GoDaddy, Cloudflare, etc.):
 ```bash
 # Install Docker
 curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and back in for group to take effect
+exit
 
 # Clone the repo
-git clone <repo-url>
+git clone https://github.com/stuhi-co/portco-monitoring.git
 cd portco-monitoring
 
 # Configure
@@ -150,9 +151,11 @@ cp .env.example .env
 
 ```bash
 sudo apt install -y caddy
+# Then edit the Caddyfile
+sudo nano /etc/caddy/Caddyfile
 ```
 
-Create `/etc/caddy/Caddyfile`:
+Replace Caddyfile's content with your domain for reverse proxy:
 
 ```
 api.news.yourdomain.com {
