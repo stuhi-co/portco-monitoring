@@ -11,6 +11,7 @@ import { DIGEST_COOLDOWN_HOURS } from "@/lib/config";
 interface TriggerDigestButtonProps {
   subscriptionId: string;
   digests?: DigestSummary[];
+  onTriggerSuccess?: () => void;
 }
 
 function getCooldownRemaining(digests?: DigestSummary[]): number {
@@ -33,6 +34,7 @@ function formatRemaining(ms: number): string {
 export function TriggerDigestButton({
   subscriptionId,
   digests,
+  onTriggerSuccess,
 }: TriggerDigestButtonProps) {
   const mutation = useTriggerDigest(subscriptionId);
   const [cooldownMs, setCooldownMs] = useState(() =>
@@ -59,9 +61,8 @@ export function TriggerDigestButton({
   async function handleTrigger() {
     try {
       await mutation.mutateAsync();
-      toast.success(
-        "Digest generation started! It will appear here once ready."
-      );
+      toast.success("Digest generation started!");
+      onTriggerSuccess?.();
       // Start local cooldown immediately
       setCooldownMs(DIGEST_COOLDOWN_HOURS * 60 * 60 * 1000);
     } catch (err) {

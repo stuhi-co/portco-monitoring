@@ -1,7 +1,8 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -26,13 +27,38 @@ function formatDate(iso: string) {
 }
 
 export function DigestList({ subscriptionId }: DigestListProps) {
-  const { data: digests, isLoading } = useDigests(subscriptionId);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const digestCountAtTrigger = useRef<number | null>(null);
+  const { data: digests, isLoading } = useDigests(subscriptionId, {
+    refetchInterval: isGenerating ? 5_000 : false,
+  });
+
+  useEffect(() => {
+    if (
+      isGenerating &&
+      digests &&
+      digestCountAtTrigger.current !== null &&
+      digests.length > digestCountAtTrigger.current
+    ) {
+      setIsGenerating(false);
+      digestCountAtTrigger.current = null;
+    }
+  }, [digests, isGenerating]);
+
+  function handleTriggerSuccess() {
+    digestCountAtTrigger.current = digests?.length ?? 0;
+    setIsGenerating(true);
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Past Digests</h2>
-        <TriggerDigestButton subscriptionId={subscriptionId} digests={digests} />
+        <TriggerDigestButton
+          subscriptionId={subscriptionId}
+          digests={digests}
+          onTriggerSuccess={handleTriggerSuccess}
+        />
       </div>
 
       {isLoading && (
@@ -44,6 +70,17 @@ export function DigestList({ subscriptionId }: DigestListProps) {
           <CardContent className="py-8 text-center text-muted-foreground">
             <FileText className="mx-auto mb-2 h-8 w-8" />
             <p>No digests yet. Generate your first one!</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {isGenerating && (
+        <Card className="border-dashed">
+          <CardContent className="flex items-center gap-3 py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              Generating your digest... This may take a minute.
+            </p>
           </CardContent>
         </Card>
       )}

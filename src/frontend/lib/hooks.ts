@@ -19,11 +19,15 @@ export function useSubscription(id: string | null) {
   });
 }
 
-export function useDigests(subscriptionId: string | null) {
+export function useDigests(
+  subscriptionId: string | null,
+  options?: { refetchInterval?: number | false }
+) {
   return useQuery({
     queryKey: ["digests", subscriptionId],
     queryFn: () => api.getDigests(subscriptionId!),
     enabled: !!subscriptionId,
+    refetchInterval: options?.refetchInterval,
   });
 }
 

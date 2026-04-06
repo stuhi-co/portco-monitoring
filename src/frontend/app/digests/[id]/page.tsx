@@ -38,8 +38,11 @@ export default function DigestViewerPage({
 
         {html && (
           <iframe
-            srcDoc={html}
-            sandbox="allow-same-origin"
+            srcDoc={html.replace(
+              "<head>",
+              '<head><base target="_blank">'
+            )}
+            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             className="w-full rounded-lg border border-border bg-white"
             style={{ minHeight: "80vh" }}
             title="Digest content"
