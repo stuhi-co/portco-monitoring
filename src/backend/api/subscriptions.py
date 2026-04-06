@@ -1,5 +1,6 @@
 import logging
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
@@ -9,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from backend.database import get_session, Company, IndustryRecord, Subscriber
 from backend.schemas import (
     CompanyResponse,
+    DayOfWeek,
     GenerateFundDescriptionRequest,
     GenerateFundDescriptionResponse,
     Industry,
@@ -125,10 +127,21 @@ async def subscribe(
     if existing is not None:
         raise HTTPException(status_code=409, detail="Email already subscribed")
 
+    timezone = "America/New_York"
+    if body.timezone:
+        try:
+            ZoneInfo(body.timezone)
+            timezone = body.timezone
+        except (KeyError, ValueError):
+            raise HTTPException(status_code=422, detail=f"Invalid timezone: {body.timezone}")
+
     subscriber = Subscriber(
         email=body.email,
         frequency=body.frequency.value,
+        preferred_day=body.preferred_day.value,
+        preferred_hour=body.preferred_hour,
         fund_description=body.fund_description,
+        timezone=timezone,
     )
     session.add(subscriber)
     await session.flush()
@@ -199,6 +212,16 @@ async def update_subscription(
         subscriber.frequency = body.frequency.value
     if body.fund_description is not None:
         subscriber.fund_description = body.fund_description
+    if body.preferred_day is not None:
+        subscriber.preferred_day = body.preferred_day.value
+    if body.preferred_hour is not None:
+        subscriber.preferred_hour = body.preferred_hour
+    if body.timezone is not None:
+        try:
+            ZoneInfo(body.timezone)
+        except (KeyError, ValueError):
+            raise HTTPException(status_code=422, detail=f"Invalid timezone: {body.timezone}")
+        subscriber.timezone = body.timezone
 
     if body.remove_company_ids:
         for cid in body.remove_company_ids:
@@ -296,6 +319,9 @@ def _subscriber_to_response(subscriber: Subscriber) -> SubscriptionResponse:
         email=subscriber.email,
         frequency=subscriber.frequency,
         fund_description=subscriber.fund_description,
+        preferred_day=subscriber.preferred_day,
+        preferred_hour=subscriber.preferred_hour,
+        timezone=subscriber.timezone,
         is_active=subscriber.is_active,
         created_at=subscriber.created_at,
         companies=[

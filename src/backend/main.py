@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api.digests import router as digests_router
 from backend.api.subscriptions import router as subscriptions_router
 from backend.config import settings
-from backend.scheduler import get_digest_trigger, run_all_digests
+from backend.scheduler import get_digest_trigger, run_scheduled_digests
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     async with AsyncScheduler() as scheduler:
         await scheduler.add_schedule(
-            run_all_digests,
+            run_scheduled_digests,
             get_digest_trigger(),
-            id="weekly_digest",
+            id="hourly_digest_check",
         )
         await scheduler.start_in_background()
         logger.info("Scheduler started")

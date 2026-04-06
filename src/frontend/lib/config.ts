@@ -40,4 +40,24 @@ export function getIndustryLabel(value: string): string {
 
 export const MAX_COMPANIES = 10;
 
-export const DIGEST_COOLDOWN_HOURS = 24;
+export const DIGEST_COOLDOWN_HOURS = 1;
+
+// ── Schedule options ────────────────────────────────────────────────────────
+
+import type { DayOfWeek } from "./api";
+
+export const DAY_OPTIONS: { value: DayOfWeek; label: string }[] = [
+  { value: "monday", label: "Monday" },
+  { value: "tuesday", label: "Tuesday" },
+  { value: "wednesday", label: "Wednesday" },
+  { value: "thursday", label: "Thursday" },
+  { value: "friday", label: "Friday" },
+  { value: "saturday", label: "Saturday" },
+  { value: "sunday", label: "Sunday" },
+];
+
+export const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const ampm = i < 12 ? "AM" : "PM";
+  const hour12 = i === 0 ? 12 : i > 12 ? i - 12 : i;
+  return { value: String(i), label: `${hour12}:00 ${ampm}` };
+});

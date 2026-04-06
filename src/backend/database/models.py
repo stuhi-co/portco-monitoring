@@ -23,6 +23,9 @@ class Subscriber(Base):
     email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     frequency: Mapped[str] = mapped_column(Text, nullable=False, default="weekly")
     fund_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preferred_day: Mapped[str] = mapped_column(Text, nullable=False, default="monday")
+    preferred_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=9)
+    timezone: Mapped[str] = mapped_column(Text, nullable=False, default="America/New_York")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 

@@ -3,11 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, Loader2, Sparkles } from "lucide-react";
+import { Plus, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,9 +16,11 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useIndustries, useSubscribeMutation, useLookupByEmail, useGenerateFundDescription } from "@/lib/hooks";
+import { DigestSchedulePicker } from "@/components/digest-schedule-picker";
+import { FundDescriptionField } from "@/components/fund-description-field";
+import { useIndustries, useSubscribeMutation, useLookupByEmail } from "@/lib/hooks";
 import { setSubscriptionId } from "@/lib/subscription";
-import { ApiError, type Industry } from "@/lib/api";
+import { ApiError, type DayOfWeek, type Frequency, type Industry } from "@/lib/api";
 import { MAX_COMPANIES } from "@/lib/config";
 
 interface CompanyRow {
@@ -32,12 +33,14 @@ export function SubscribeForm() {
   const { data: industries } = useIndustries();
   const subscribeMutation = useSubscribeMutation();
   const lookupMutation = useLookupByEmail();
-  const generateMutation = useGenerateFundDescription();
 
   const [email, setEmail] = useState("");
   const [companies, setCompanies] = useState<CompanyRow[]>([
     { name: "", industry: "" },
   ]);
+  const [frequency, setFrequency] = useState<Frequency>("weekly");
+  const [preferredDay, setPreferredDay] = useState<DayOfWeek>("monday");
+  const [preferredHour, setPreferredHour] = useState(9);
   const [fundDescription, setFundDescription] = useState("");
   const [lookupEmail, setLookupEmail] = useState("");
 
@@ -70,7 +73,11 @@ export function SubscribeForm() {
           name: c.name.trim(),
           industry: (c.industry as Industry) || undefined,
         })),
+        frequency,
+        preferred_day: preferredDay,
+        preferred_hour: preferredHour,
         fund_description: fundDescription.trim() || undefined,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       setSubscriptionId(result.id);
       toast.success("Subscribed successfully!");
@@ -219,45 +226,22 @@ export function SubscribeForm() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="fund-desc">Fund Description (optional)</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!email.trim() || !email.includes("@") || generateMutation.isPending}
-                    onClick={async () => {
-                      try {
-                        const result = await generateMutation.mutateAsync(email.trim());
-                        setFundDescription(result.fund_description);
-                        toast.success("Fund description generated");
-                      } catch (err) {
-                        if (err instanceof ApiError && err.status === 422) {
-                          toast.error("Please use a company email to auto-generate");
-                        } else {
-                          toast.error("Generation failed, please describe your fund manually");
-                        }
-                      }
-                    }}
-                  >
-                    {generateMutation.isPending ? (
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="mr-1 h-4 w-4" />
-                    )}
-                    Generate
-                  </Button>
-                </div>
-                <Textarea
-                  id="fund-desc"
-                  placeholder="Describe your fund's focus to get more relevant insights..."
-                  value={fundDescription}
-                  onChange={(e) => setFundDescription(e.target.value)}
-                  rows={3}
-                  disabled={generateMutation.isPending}
-                />
-              </div>
+              <FundDescriptionField
+                email={email}
+                value={fundDescription}
+                onChange={setFundDescription}
+                label="Fund Description (optional)"
+                requireEmailValidation
+              />
+
+              <DigestSchedulePicker
+                frequency={frequency}
+                onFrequencyChange={setFrequency}
+                preferredDay={preferredDay}
+                onPreferredDayChange={setPreferredDay}
+                preferredHour={preferredHour}
+                onPreferredHourChange={setPreferredHour}
+              />
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {subscribeMutation.isPending && (

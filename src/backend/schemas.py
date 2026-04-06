@@ -62,6 +62,16 @@ class Frequency(StrEnum):
     weekly = "weekly"
 
 
+class DayOfWeek(StrEnum):
+    monday = "monday"
+    tuesday = "tuesday"
+    wednesday = "wednesday"
+    thursday = "thursday"
+    friday = "friday"
+    saturday = "saturday"
+    sunday = "sunday"
+
+
 # ── Request schemas ───────────────────────────────────────────────────────────
 
 
@@ -78,12 +88,18 @@ class SubscribeRequest(BaseModel):
     email: EmailStr
     companies: list[CompanyInput] = Field(min_length=1, max_length=10)
     frequency: Frequency = Frequency.weekly
+    preferred_day: DayOfWeek = DayOfWeek.monday
+    preferred_hour: int = Field(default=9, ge=0, le=23)
     fund_description: str | None = None
+    timezone: str | None = None
 
 
 class SubscriptionUpdate(BaseModel):
     frequency: Frequency | None = None
     fund_description: str | None = None
+    preferred_day: DayOfWeek | None = None
+    preferred_hour: int | None = Field(default=None, ge=0, le=23)
+    timezone: str | None = None
     add_companies: list[CompanyInput] | None = None
     remove_company_ids: list[UUID] | None = None
 
@@ -108,6 +124,9 @@ class SubscriptionResponse(BaseModel):
     email: str
     frequency: Frequency
     fund_description: str | None
+    preferred_day: DayOfWeek
+    preferred_hour: int
+    timezone: str
     is_active: bool
     companies: list[CompanyResponse]
     created_at: datetime

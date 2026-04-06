@@ -2,16 +2,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useUpdateSubscription, useDeleteSubscription, useGenerateFundDescription } from "@/lib/hooks";
+import { DigestSchedulePicker } from "@/components/digest-schedule-picker";
+import { FundDescriptionField } from "@/components/fund-description-field";
+import { useUpdateSubscription, useDeleteSubscription } from "@/lib/hooks";
 import { clearSubscriptionId } from "@/lib/subscription";
-import { ApiError, type SubscriptionResponse } from "@/lib/api";
+import type { DayOfWeek, Frequency, SubscriptionResponse } from "@/lib/api";
 
 interface SubscriptionSettingsProps {
   subscription: SubscriptionResponse;
@@ -23,10 +24,18 @@ export function SubscriptionSettings({
   const router = useRouter();
   const updateMutation = useUpdateSubscription(subscription.id);
   const deleteMutation = useDeleteSubscription();
-  const generateMutation = useGenerateFundDescription();
 
   const [fundDescription, setFundDescription] = useState(
     subscription.fund_description ?? ""
+  );
+  const [frequency, setFrequency] = useState<Frequency>(
+    subscription.frequency
+  );
+  const [preferredDay, setPreferredDay] = useState<DayOfWeek>(
+    subscription.preferred_day
+  );
+  const [preferredHour, setPreferredHour] = useState(
+    subscription.preferred_hour
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -35,6 +44,10 @@ export function SubscriptionSettings({
     try {
       await updateMutation.mutateAsync({
         fund_description: fundDescription.trim() || null,
+        frequency,
+        preferred_day: preferredDay,
+        preferred_hour: preferredHour,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       toast.success("Settings updated");
     } catch {
@@ -72,45 +85,20 @@ export function SubscriptionSettings({
               </p>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="settings-fund-desc">Fund Description</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={generateMutation.isPending}
-                  onClick={async () => {
-                    try {
-                      const result = await generateMutation.mutateAsync(subscription.email);
-                      setFundDescription(result.fund_description);
-                      toast.success("Fund description generated");
-                    } catch (err) {
-                      if (err instanceof ApiError && err.status === 422) {
-                        toast.error("Please use a company email to auto-generate");
-                      } else {
-                        toast.error("Generation failed, please describe your fund manually");
-                      }
-                    }
-                  }}
-                >
-                  {generateMutation.isPending ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-1 h-4 w-4" />
-                  )}
-                  Generate
-                </Button>
-              </div>
-              <Textarea
-                id="settings-fund-desc"
-                placeholder="Describe your fund's focus..."
-                value={fundDescription}
-                onChange={(e) => setFundDescription(e.target.value)}
-                rows={3}
-                disabled={generateMutation.isPending}
-              />
-            </div>
+            <FundDescriptionField
+              email={subscription.email}
+              value={fundDescription}
+              onChange={setFundDescription}
+            />
+
+            <DigestSchedulePicker
+              frequency={frequency}
+              onFrequencyChange={setFrequency}
+              preferredDay={preferredDay}
+              onPreferredDayChange={setPreferredDay}
+              preferredHour={preferredHour}
+              onPreferredHourChange={setPreferredHour}
+            />
 
             <Button type="submit" disabled={updateMutation.isPending}>
               {updateMutation.isPending && (

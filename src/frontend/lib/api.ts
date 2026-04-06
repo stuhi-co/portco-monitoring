@@ -33,6 +33,15 @@ export type Industry =
 
 export type Frequency = "daily" | "weekly";
 
+export type DayOfWeek =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
 export interface CompanyInput {
   name: string;
   industry?: Industry | null;
@@ -42,12 +51,18 @@ export interface SubscribeRequest {
   email: string;
   companies: CompanyInput[];
   frequency?: Frequency;
+  preferred_day?: DayOfWeek;
+  preferred_hour?: number;
   fund_description?: string | null;
+  timezone?: string | null;
 }
 
 export interface SubscriptionUpdate {
   frequency?: Frequency | null;
   fund_description?: string | null;
+  preferred_day?: DayOfWeek | null;
+  preferred_hour?: number | null;
+  timezone?: string | null;
   add_companies?: CompanyInput[] | null;
   remove_company_ids?: string[] | null;
 }
@@ -67,6 +82,9 @@ export interface SubscriptionResponse {
   email: string;
   frequency: Frequency;
   fund_description: string | null;
+  preferred_day: DayOfWeek;
+  preferred_hour: number;
+  timezone: string;
   is_active: boolean;
   companies: CompanyResponse[];
   created_at: string;

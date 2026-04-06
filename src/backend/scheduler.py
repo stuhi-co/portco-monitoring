@@ -1,18 +1,22 @@
 import logging
+from datetime import datetime, timezone
 
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
+from zoneinfo import ZoneInfo
 
-from backend.config import settings
 from backend.database import async_session_factory, Subscriber
 from backend.pipeline import run_digest_pipeline
 
 logger = logging.getLogger(__name__)
 
+DAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
-async def run_all_digests() -> None:
-    """Run digest pipeline for all active subscribers."""
-    logger.info("Scheduled digest run starting")
+
+async def run_scheduled_digests() -> None:
+    """Hourly check: run digest for subscribers whose preferred day/hour matches now."""
+    utc_now = datetime.now(timezone.utc)
+    logger.info("Hourly digest check at %s UTC", utc_now.strftime("%Y-%m-%d %H:%M"))
 
     async with async_session_factory() as session:
         result = await session.execute(
@@ -22,15 +26,26 @@ async def run_all_digests() -> None:
 
     for sub in subscribers:
         try:
-            logger.info("Running digest for %s", sub.email)
-            await run_digest_pipeline(sub.id)
-        except Exception:
-            logger.exception("Digest pipeline failed for %s", sub.email)
+            tz = ZoneInfo(sub.timezone)
+        except (KeyError, ValueError):
+            logger.warning("Invalid timezone %r for %s, falling back to UTC", sub.timezone, sub.email)
+            tz = timezone.utc
+
+        local_now = utc_now.astimezone(tz)
+        local_day = DAY_NAMES[local_now.weekday()]
+        local_hour = local_now.hour
+
+        should_run = local_hour == sub.preferred_hour
+        if sub.frequency == "weekly":
+            should_run = should_run and local_day == sub.preferred_day
+
+        if should_run:
+            try:
+                logger.info("Running scheduled digest for %s (tz=%s, %s %02d:00)", sub.email, sub.timezone, local_day, local_hour)
+                await run_digest_pipeline(sub.id)
+            except Exception:
+                logger.exception("Digest pipeline failed for %s", sub.email)
 
 
 def get_digest_trigger() -> CronTrigger:
-    return CronTrigger(
-        day_of_week=settings.digest_cron_day_of_week,
-        hour=settings.digest_cron_hour,
-        minute=0,
-    )
+    return CronTrigger(minute=0)

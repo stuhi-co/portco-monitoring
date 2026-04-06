@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Subscription limits
     max_companies_per_subscription: int = 10
-    digest_cooldown_hours: int = 24
+    digest_cooldown_hours: int = 1
 
     # CORS
     allowed_origins: list[str] = ["http://localhost:3000"]
@@ -24,10 +24,6 @@ class Settings(BaseSettings):
     # Email
     email_from: str = "Ana Llana <ana@stuhi.co>"
     app_base_url: str = "http://localhost:8000"
-
-    # Scheduler
-    digest_cron_hour: int = 16  # 4:00 PM UTC = 8:00 AM PT
-    digest_cron_day_of_week: str = "mon"
 
     # LLM
     claude_model: str = "claude-haiku-4-5-20251001"
