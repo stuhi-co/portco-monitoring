@@ -58,6 +58,13 @@
           </td>
         </tr>
 
+        {% if company.no_news %}
+        <tr>
+          <td style="padding:8px 0 12px 16px;">
+            <p style="margin:0;font-size:13px;font-style:italic;color:#9ca3af;">No significant developments since last digest.</p>
+          </td>
+        </tr>
+        {% else %}
         <!-- Key Developments (full detail) -->
         {% for d in company.key_developments %}
         <tr>
@@ -106,6 +113,7 @@
           </td>
         </tr>
         {% endfor %}
+        {% endif %}
         {% endif %}
 
       </table>

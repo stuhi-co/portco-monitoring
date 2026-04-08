@@ -61,13 +61,20 @@ async def compile_digest(
                     "name": company_name,
                     "key_developments": key_devs,
                     "notable_developments": notable_devs,
+                    "no_news": False,
+                })
+            else:
+                company_sections.append({
+                    "name": company_name,
+                    "key_developments": [],
+                    "notable_developments": [],
+                    "no_news": True,
                 })
 
-        if company_sections:
-            industry_sections.append({
-                "name": industry_name.replace("_", " ").title(),
-                "companies": company_sections,
-            })
+        industry_sections.append({
+            "name": industry_name.replace("_", " ").title(),
+            "companies": company_sections,
+        })
 
     subject = f"Portfolio Intelligence — Week of {period_end}"
 

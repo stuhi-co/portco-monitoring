@@ -256,7 +256,7 @@ async def _synthesize_all(
 
     tasks = [_synthesize_one(name, arts) for name, arts in articles_by_company.items()]
     results = await asyncio.gather(*tasks)
-    return {name: devs for name, devs in results if devs}
+    return dict(results)
 
 
 def _group_companies_by_industry(companies: list[Company]) -> dict[str, list[dict]]:

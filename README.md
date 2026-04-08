@@ -183,6 +183,7 @@ After a change in the code, env variables, or pulling the changes from the publi
 ```bash
 # Rebuild and restart only backend (db volume is preserved)
 docker compose up -d --build backend
+docker compose exec backend uv run alembic upgrade head # If any migration is to run
 # Restart without rebuilding (e.g. just changed .env)
 docker compose restart backend
 # Check db data is still there
