@@ -126,6 +126,7 @@ export class ApiError extends Error {
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!res.ok) {
@@ -148,12 +149,6 @@ export function getSubscription(id: string) {
   return fetchJSON<SubscriptionResponse>(`/api/subscriptions/${id}`);
 }
 
-export function lookupByEmail(email: string) {
-  return fetchJSON<SubscriptionResponse>(
-    `/api/subscriptions/lookup?email=${encodeURIComponent(email)}`
-  );
-}
-
 export function updateSubscription(id: string, body: SubscriptionUpdate) {
   return fetchJSON<SubscriptionResponse>(`/api/subscriptions/${id}`, {
     method: "PATCH",
@@ -162,7 +157,10 @@ export function updateSubscription(id: string, body: SubscriptionUpdate) {
 }
 
 export async function deleteSubscription(id: string) {
-  const res = await fetch(`/api/subscriptions/${id}`, { method: "DELETE" });
+  const res = await fetch(`/api/subscriptions/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
     throw new ApiError(res.status, body.detail ?? res.statusText);
@@ -176,7 +174,9 @@ export function getDigests(subscriptionId: string) {
 }
 
 export async function getDigestHtml(digestId: string): Promise<string> {
-  const res = await fetch(`/api/digests/${digestId}`);
+  const res = await fetch(`/api/digests/${digestId}`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     throw new ApiError(res.status, "Failed to load digest");
   }
@@ -199,4 +199,35 @@ export function generateFundDescription(email: string) {
 
 export function getIndustries() {
   return fetchJSON<IndustryOption[]>("/api/industries");
+}
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+
+export function requestMagicLink(email: string) {
+  return fetchJSON<{ message: string }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function verifyMagicLink(token: string) {
+  return fetchJSON<{ subscriber_id: string }>("/api/auth/verify", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export async function logout() {
+  const res = await fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, body.detail ?? res.statusText);
+  }
+}
+
+export function getMe() {
+  return fetchJSON<SubscriptionResponse>("/api/auth/me");
 }

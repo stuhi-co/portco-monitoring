@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth import get_current_subscriber
 from backend.config import settings
 from backend.database import get_session, Digest, Subscriber
 from backend.schemas import DigestSummary
@@ -18,13 +19,11 @@ router = APIRouter(prefix="/api", tags=["digests"])
 @router.get("/subscriptions/{subscriber_id}/digests", response_model=list[DigestSummary])
 async def list_digests(
     subscriber_id: UUID,
+    current_subscriber: Subscriber = Depends(get_current_subscriber),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(
-        select(Subscriber).where(Subscriber.id == subscriber_id)
-    )
-    if result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+    if current_subscriber.id != subscriber_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await session.execute(
         select(Digest)
@@ -50,14 +49,13 @@ async def view_digest(
 async def trigger_digest(
     subscriber_id: UUID,
     background_tasks: BackgroundTasks,
+    current_subscriber: Subscriber = Depends(get_current_subscriber),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(
-        select(Subscriber).where(Subscriber.id == subscriber_id)
-    )
-    subscriber = result.scalar_one_or_none()
-    if subscriber is None:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+    if current_subscriber.id != subscriber_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    subscriber = current_subscriber
     if not subscriber.is_active:
         raise HTTPException(status_code=400, detail="Subscription is inactive")
 

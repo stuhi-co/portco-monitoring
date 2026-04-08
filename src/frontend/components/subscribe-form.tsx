@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DigestSchedulePicker } from "@/components/digest-schedule-picker";
 import { FundDescriptionField } from "@/components/fund-description-field";
-import { useIndustries, useSubscribeMutation, useLookupByEmail } from "@/lib/hooks";
+import { useIndustries, useSubscribeMutation, useRequestMagicLink } from "@/lib/hooks";
 import { setSubscriptionId } from "@/lib/subscription";
 import { ApiError, type DayOfWeek, type Frequency, type Industry } from "@/lib/api";
 import { MAX_COMPANIES } from "@/lib/config";
@@ -32,7 +32,8 @@ export function SubscribeForm() {
   const router = useRouter();
   const { data: industries } = useIndustries();
   const subscribeMutation = useSubscribeMutation();
-  const lookupMutation = useLookupByEmail();
+  const magicLinkMutation = useRequestMagicLink();
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   const [email, setEmail] = useState("");
   const [companies, setCompanies] = useState<CompanyRow[]>([
@@ -84,38 +85,25 @@ export function SubscribeForm() {
       router.push("/dashboard");
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        try {
-          const existing = await lookupMutation.mutateAsync(email.trim());
-          setSubscriptionId(existing.id);
-          toast.info("Welcome back! Found your existing subscription.");
-          router.push("/dashboard");
-        } catch {
-          toast.error("Email already subscribed but lookup failed. Try signing in instead.");
-        }
+        toast.error("Email already subscribed. Please sign in instead.");
       } else {
         toast.error(err instanceof Error ? err.message : "Subscription failed");
       }
     }
   }
 
-  async function handleLookup(e: React.FormEvent) {
+  async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     if (!lookupEmail.trim()) return;
     try {
-      const result = await lookupMutation.mutateAsync(lookupEmail.trim());
-      setSubscriptionId(result.id);
-      toast.success("Welcome back!");
-      router.push("/dashboard");
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        toast.error("No subscription found for this email.");
-      } else {
-        toast.error("Lookup failed. Please try again.");
-      }
+      await magicLinkMutation.mutateAsync(lookupEmail.trim());
+      setMagicLinkSent(true);
+    } catch {
+      toast.error("Failed to send login link. Please try again.");
     }
   }
 
-  const isLoading = subscribeMutation.isPending || lookupMutation.isPending;
+  const isLoading = subscribeMutation.isPending || magicLinkMutation.isPending;
 
   return (
     <Tabs defaultValue="signin">
@@ -130,25 +118,40 @@ export function SubscribeForm() {
             <CardTitle>Welcome Back</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLookup} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="lookup-email">Email</Label>
-                <Input
-                  id="lookup-email"
-                  type="email"
-                  placeholder="you@fund.com"
-                  value={lookupEmail}
-                  onChange={(e) => setLookupEmail(e.target.value)}
-                  required
-                />
+            {magicLinkSent ? (
+              <div className="space-y-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Check your email for a sign-in link. It may take a moment to arrive<br />Also check your spam folder.
+                </p>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setMagicLinkSent(false)}
+                >
+                  Use a different email
+                </Button>
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {lookupMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Sign In
-              </Button>
-            </form>
+            ) : (
+              <form onSubmit={handleMagicLink} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="lookup-email">Email</Label>
+                  <Input
+                    id="lookup-email"
+                    type="email"
+                    placeholder="you@fund.com"
+                    value={lookupEmail}
+                    onChange={(e) => setLookupEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {magicLinkMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Send Sign-In Link
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
       </TabsContent>

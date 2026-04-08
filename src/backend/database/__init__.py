@@ -4,6 +4,8 @@ from backend.database.models import (
     Company,
     Digest,
     IndustryRecord,
+    LoginToken,
+    Session,
     Subscriber,
 )
 
@@ -16,5 +18,7 @@ __all__ = [
     "Company",
     "Digest",
     "IndustryRecord",
+    "LoginToken",
+    "Session",
     "Subscriber",
 ]

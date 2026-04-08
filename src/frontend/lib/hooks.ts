@@ -85,14 +85,32 @@ export function useDeleteSubscription() {
   });
 }
 
-export function useLookupByEmail() {
-  return useMutation({
-    mutationFn: api.lookupByEmail,
-  });
-}
-
 export function useGenerateFundDescription() {
   return useMutation({
     mutationFn: api.generateFundDescription,
+  });
+}
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+
+export function useRequestMagicLink() {
+  return useMutation({
+    mutationFn: api.requestMagicLink,
+  });
+}
+
+export function useVerifyMagicLink() {
+  return useMutation({
+    mutationFn: api.verifyMagicLink,
+  });
+}
+
+export function useLogout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.logout,
+    onSuccess: () => {
+      qc.clear();
+    },
   });
 }

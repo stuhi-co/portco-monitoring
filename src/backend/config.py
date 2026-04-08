@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     email_from: str = "Ana Llana <ana@stuhi.co>"
     app_base_url: str = "http://localhost:8000"
 
+    # Auth
+    frontend_base_url: str = "http://localhost:3000"
+    magic_link_ttl_minutes: int = 15
+    session_ttl_days: int = 30
+
     # LLM
     claude_model: str = "claude-haiku-4-5-20251001"
 

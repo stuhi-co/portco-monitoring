@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const updateMutation = useUpdateSubscription(subId ?? "");
 
   useEffect(() => {
-    if (error instanceof ApiError && error.status === 404) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 401)) {
       clearSubscriptionId();
       router.replace("/");
     }

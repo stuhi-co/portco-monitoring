@@ -2,11 +2,12 @@ import logging
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.api.auth import create_session_for_subscriber, get_current_subscriber
 from backend.database import get_session, Company, IndustryRecord, Subscriber
 from backend.schemas import (
     CompanyResponse,
@@ -118,6 +119,7 @@ async def generate_fund_description(body: GenerateFundDescriptionRequest):
 @router.post("/subscribe", response_model=SubscriptionResponse, status_code=201)
 async def subscribe(
     body: SubscribeRequest,
+    response: Response,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
@@ -158,6 +160,8 @@ async def subscribe(
         )
         session.add(company)
 
+    # Auto-login: create session and set cookie
+    await create_session_for_subscriber(subscriber, session, response)
     await session.commit()
 
     # Reload with relationships
@@ -174,29 +178,14 @@ async def subscribe(
     return _subscriber_to_response(subscriber)
 
 
-@router.get("/subscriptions/lookup", response_model=SubscriptionResponse)
-async def lookup_subscription(
-    email: str,
-    session: AsyncSession = Depends(get_session),
-):
-    result = await session.execute(
-        select(Subscriber)
-        .where(Subscriber.email == email, Subscriber.is_active == True)
-        .options(selectinload(Subscriber.companies).selectinload(Company.industry))
-    )
-    subscriber = result.scalar_one_or_none()
-    if subscriber is None:
-        raise HTTPException(status_code=404, detail="No subscription found for this email")
-    return _subscriber_to_response(subscriber)
-
-
 @router.get("/subscriptions/{subscriber_id}", response_model=SubscriptionResponse)
 async def get_subscription(
     subscriber_id: UUID,
-    session: AsyncSession = Depends(get_session),
+    current_subscriber: Subscriber = Depends(get_current_subscriber),
 ):
-    subscriber = await _load_subscriber(session, subscriber_id)
-    return _subscriber_to_response(subscriber)
+    if current_subscriber.id != subscriber_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return _subscriber_to_response(current_subscriber)
 
 
 @router.patch("/subscriptions/{subscriber_id}", response_model=SubscriptionResponse)
@@ -204,8 +193,11 @@ async def update_subscription(
     subscriber_id: UUID,
     body: SubscriptionUpdate,
     background_tasks: BackgroundTasks,
+    current_subscriber: Subscriber = Depends(get_current_subscriber),
     session: AsyncSession = Depends(get_session),
 ):
+    if current_subscriber.id != subscriber_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     subscriber = await _load_subscriber(session, subscriber_id)
 
     if body.frequency is not None:
@@ -266,8 +258,11 @@ async def update_subscription(
 @router.delete("/subscriptions/{subscriber_id}", status_code=204)
 async def delete_subscription(
     subscriber_id: UUID,
+    current_subscriber: Subscriber = Depends(get_current_subscriber),
     session: AsyncSession = Depends(get_session),
 ):
+    if current_subscriber.id != subscriber_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     subscriber = await _load_subscriber(session, subscriber_id)
     await session.delete(subscriber)
     await session.commit()
